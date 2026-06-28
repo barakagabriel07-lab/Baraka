@@ -1,0 +1,6 @@
+{
+  "name": "MUHAS PULSE",
+  "description": "A highly polished, interactive student and administrator dashboard for MUHAS Student Network with rich custom animations, advanced programmer settings, and chat features.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
