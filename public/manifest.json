@@ -3,6 +3,14 @@
   "short_name": "MUHAS Pulse",
   "description": "A highly polished, interactive student and administrator network dashboard for MUHAS with rich features, secure registry, and chat.",
   "categories": ["education", "medical", "productivity"],
+  "scope": "/",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0ea5e9",
+  "orientation": "portrait",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon-192.png",
@@ -29,13 +37,6 @@
       "purpose": "maskable"
     }
   ],
-  "start_url": "/",
-  "id": "/",
-  "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0ea5e9",
-  "orientation": "portrait",
-  "prefer_related_applications": false,
   "shortcuts": [
     {
       "name": "Dashboard",
@@ -43,6 +44,22 @@
       "description": "Open student dashboard",
       "url": "/",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-desktop.jpg",
+      "sizes": "1280x720",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "MUHAS PULSE Dashboard Desktop"
+    },
+    {
+      "src": "/screenshot-mobile.jpg",
+      "sizes": "720x1280",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "label": "MUHAS PULSE Dashboard Mobile"
     }
   ]
 }

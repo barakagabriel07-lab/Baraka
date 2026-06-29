@@ -4,7 +4,11 @@ const ASSETS_TO_CACHE = [
   '/index.html',
   '/manifest.json',
   '/icon-192.png',
-  '/icon-512.png'
+  '/icon-512.png',
+  '/icon-192.jpg',
+  '/icon-512.jpg',
+  '/screenshot-desktop.jpg',
+  '/screenshot-mobile.jpg'
 ];
 
 // Install Service Worker
@@ -37,6 +41,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // Only handle HTTP/HTTPS requests (avoid chrome-extension://, firebase, etc.)
   if (!event.request.url.startsWith(self.location.origin)) {
+    return;
+  }
+
+  // Avoid caching Google Analytics, Firestore/Firebase websockets/API calls, etc.
+  if (event.request.url.includes('/firestore.googleapis.com') || event.request.url.includes('/identitytoolkit') || event.request.url.includes('firebase')) {
     return;
   }
 
