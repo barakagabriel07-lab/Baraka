@@ -62,6 +62,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [countryCode, setCountryCode] = useState(currentUser.countryCode || '');
   const photoInputRef = useRef<HTMLInputElement>(null);
 
+  // Admin Setup states for Class Representative and Lecturers
+  const [adminType, setAdminType] = useState<'cr' | 'lecturer'>(() => {
+    if (currentUser.role === 'admin') {
+      if (currentUser.regNo && /^\d{4}-\d{2}-\d{5}$/.test(currentUser.regNo)) {
+        return 'cr';
+      }
+      if (currentUser.regNo && currentUser.regNo.toLowerCase().startsWith('lecturer-')) {
+        return 'lecturer';
+      }
+    }
+    return 'cr';
+  });
+
+  const [adminRegNo, setAdminRegNo] = useState(() => {
+    if (currentUser.regNo && currentUser.regNo.toLowerCase() === 'admin') {
+      return '';
+    }
+    return currentUser.regNo || '';
+  });
+
   // Security State
   const [currentPwd, setCurrentPwd] = useState('');
   const [newPwd, setNewPwd] = useState('');
@@ -138,6 +158,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     if (isStaff) {
       updates.adminRole = adminRole.trim() || undefined;
+    }
+
+    if (currentUser.role === 'admin') {
+      let finalRegNo = currentUser.regNo;
+      if (adminType === 'cr') {
+        const cleanedReg = adminRegNo.trim();
+        if (!cleanedReg) {
+          showToast("⚠️ Registration number is required for Class Representatives.");
+          return;
+        }
+        if (!/^\d{4}-\d{2}-\d{5}$/.test(cleanedReg)) {
+          showToast("⚠️ Invalid format! Registration number must follow: YYYY-DD-NNNNN");
+          return;
+        }
+        finalRegNo = cleanedReg;
+      } else {
+        // Lecturer: no registration number required. Automatically generate identifier
+        finalRegNo = `lecturer-${firstName.trim().toLowerCase()}-${lastName.trim().toLowerCase()}`;
+      }
+
+      // Check if registration number has changed
+      if (finalRegNo.toLowerCase() !== currentUser.regNo.toLowerCase()) {
+        const collision = allUsers.some(u => u.regNo && u.regNo.toLowerCase() === finalRegNo.toLowerCase());
+        if (collision) {
+          showToast(`⚠️ Identifier "${finalRegNo}" is already in use by another user.`);
+          return;
+        }
+        updates.regNo = finalRegNo;
+      }
     }
 
     onUpdateUser(updates);
@@ -371,6 +420,73 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
                         Your leadership role shown to students in the "Meet the Admins" panel.
                       </p>
+                    </div>
+                  )}
+
+                  {currentUser.role === 'admin' && (
+                    <div className="sm:col-span-2 bg-amber-500/5 dark:bg-amber-500/10 p-4 rounded-xl border border-amber-500/20 space-y-4">
+                      <h4 className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <ShieldAlert className="w-4 h-4" />
+                        Admin Classification & Registry Setup
+                      </h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Please specify your administrative role type. This determines whether you require a student registry number.
+                      </p>
+
+                      <div className="flex gap-6 pt-1">
+                        <label className="flex items-center gap-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                          <input
+                            type="radio"
+                            name="adminType"
+                            value="cr"
+                            checked={adminType === 'cr'}
+                            onChange={() => {
+                              setAdminType('cr');
+                              if (adminRegNo === 'admin') {
+                                setAdminRegNo('');
+                              }
+                            }}
+                            className="text-teal-600 focus:ring-teal-500"
+                          />
+                          Class Representative (CR)
+                        </label>
+                        <label className="flex items-center gap-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                          <input
+                            type="radio"
+                            name="adminType"
+                            value="lecturer"
+                            checked={adminType === 'lecturer'}
+                            onChange={() => {
+                              setAdminType('lecturer');
+                              setAdminRegNo('');
+                            }}
+                            className="text-teal-600 focus:ring-teal-500"
+                          />
+                          Lecturer / Professor
+                        </label>
+                      </div>
+
+                      {adminType === 'cr' ? (
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                            My Class Rep Registration Number <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={adminRegNo}
+                            onChange={(e) => setAdminRegNo(e.target.value)}
+                            placeholder="Format: YYYY-DD-NNNNN"
+                            className={`w-full max-w-xs bg-slate-50 dark:bg-slate-950 p-2.5 border border-slate-200 dark:border-slate-800/80 ${radius} text-xs focus:outline-none focus:border-emerald-500 font-mono`}
+                          />
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
+                            Format must strictly follow: YYYY-DD-NNNNN (e.g., 2025-04-00012).
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-teal-500/5 dark:bg-teal-500/10 rounded-lg border border-teal-500/10 text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+                          💡 <strong>Lecturer Configuration:</strong> A student registration number is not required. Your unique system ID will automatically be computed (e.g. <code>lecturer-lastname</code>) upon saving.
+                        </div>
+                      )}
                     </div>
                   )}
 

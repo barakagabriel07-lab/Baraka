@@ -875,6 +875,11 @@ export default function App() {
 
   // App Level Operations
   const handleLogOut = async () => {
+    if (currentUser?.role === 'admin' && (currentUser.regNo.toLowerCase() === 'admin' || currentUser.password === '123')) {
+      showToast("❌ Logout Blocked: As a default administrator, you must first personalize your registration details and password in settings.");
+      setIsSettingsOpen(true);
+      return;
+    }
     try {
       await signOut(auth);
       setSessionUserReg(null);
@@ -2018,7 +2023,12 @@ export default function App() {
                               <button
                                 onClick={() => {
                                   setIsProfileMenuOpen(false);
-                                  setIsLogoutConfirmOpen(true);
+                                  if (currentUser?.role === 'admin' && (currentUser.regNo.toLowerCase() === 'admin' || currentUser.password === '123')) {
+                                    showToast("❌ Logout Blocked: As a default administrator, you must first personalize your registration details and password in settings.");
+                                    setIsSettingsOpen(true);
+                                  } else {
+                                    setIsLogoutConfirmOpen(true);
+                                  }
                                 }}
                                 className="w-full text-left py-2 px-3 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg font-bold text-red-500 flex items-center gap-2"
                               >
@@ -2170,9 +2180,23 @@ export default function App() {
             onUpdateConfig={handleUpdateConfig}
             onUpdateUser={async (updated) => {
               try {
-                await updateDoc(doc(db, "users", currentUser!.regNo.toLowerCase()), updated);
+                const oldRegNoLower = currentUser!.regNo.toLowerCase();
+                if (updated.regNo && updated.regNo.toLowerCase() !== oldRegNoLower) {
+                  const newRegNoLower = updated.regNo.toLowerCase();
+                  const fullUpdatedUser = {
+                    ...currentUser!,
+                    ...updated,
+                    regNo: updated.regNo
+                  };
+                  await setDoc(doc(db, "users", newRegNoLower), fullUpdatedUser);
+                  await deleteDoc(doc(db, "users", oldRegNoLower));
+                  setSessionUserReg(updated.regNo);
+                } else {
+                  await updateDoc(doc(db, "users", oldRegNoLower), updated);
+                }
               } catch (e) {
                 console.error("User profile update failed", e);
+                showToast("❌ Failed to update profile details in database.");
               }
             }}
             allUsers={users}
