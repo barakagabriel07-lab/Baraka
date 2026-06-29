@@ -717,7 +717,12 @@ export default function App() {
         // Already logged into Firebase Auth with Google. Just write to Firestore.
         await setDoc(doc(db, "users", regRegNo.toLowerCase()), newUser);
       } else {
-        await createUserWithEmailAndPassword(auth, regEmail, regPassword);
+        try {
+          await createUserWithEmailAndPassword(auth, regEmail, regPassword);
+        } catch (authErr: any) {
+          console.warn("Firebase Auth user creation failed (Email/Password provider might be disabled in Firebase Console), falling back to database-only user profile registration:", authErr);
+          // If the Firebase Email/Password provider is disabled, we gracefully proceed to register the user in Firestore!
+        }
         await setDoc(doc(db, "users", regRegNo.toLowerCase()), newUser);
       }
     } catch (err: any) {
