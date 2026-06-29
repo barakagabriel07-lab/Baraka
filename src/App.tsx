@@ -361,7 +361,7 @@ export default function App() {
     playSynthesizedChime();
   };
 
-  const handleRegisterUser = (e: React.FormEvent) => {
+  const handleRegisterUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegisterError(null);
     setRegisterWarningFields([]);
@@ -419,7 +419,20 @@ export default function App() {
       showToast("❌ This email address is already taken.");
       return;
     }
+await createUserWithEmailAndPassword(auth, regEmail, regPassword);
 
+await setDoc(doc(db, "users", regRegNo), {
+  firstName: regFirst,
+  middleName: regMiddle,
+  lastName: regLast,
+  gender: regGender,
+  regNo: regRegNo,
+  course: regCourse,
+  email: regEmail,
+  phone: regPhone,
+  role: "user",
+  createdAt: new Date().toISOString()
+});
     const newUser: User = {
       firstName: regFirst,
       middleName: regMiddle,
