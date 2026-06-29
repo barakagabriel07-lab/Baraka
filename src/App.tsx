@@ -54,7 +54,21 @@ export default function App() {
 
   const [users, setUsers] = useState<User[]>(() => {
     const cached = localStorage.getItem('muhas_pulse_users');
-    return cached ? JSON.parse(cached) : INITIAL_USERS;
+    let loadedUsers: User[] = cached ? JSON.parse(cached) : INITIAL_USERS;
+    
+    // Normalize Baraka Gabriel SHIRIMA database entry as requested
+    loadedUsers = loadedUsers.map(u => {
+      if (u.regNo === "2025-04-00000") {
+        return {
+          ...u,
+          firstName: "Baraka",
+          middleName: "Gabriel",
+          lastName: "SHIRIMA"
+        };
+      }
+      return u;
+    });
+    return loadedUsers;
   });
 
   const [reports, setReports] = useState<Report[]>(() => {
@@ -217,12 +231,38 @@ export default function App() {
   }, [comments]);
 
   useEffect(() => {
-    localStorage.setItem('muhas_pulse_documents', JSON.stringify(documents));
+    try {
+      localStorage.setItem('muhas_pulse_documents', JSON.stringify(documents));
+    } catch (e) {
+      console.warn("Storage quota exceeded, caching metadata only for some documents to fit browser limit.", e);
+      // Clean up larger documents dataUrl to fit in localStorage
+      const optimizedDocs = documents.map(doc => {
+        if (doc.dataUrl && doc.dataUrl.length > 100000) {
+          return { ...doc, dataUrl: "" }; // keep metadata only
+        }
+        return doc;
+      });
+      try {
+        localStorage.setItem('muhas_pulse_documents', JSON.stringify(optimizedDocs));
+      } catch (innerErr) {
+        // Fallback: clear all dataUrls in localStorage
+        const metaOnlyDocs = documents.map(doc => ({ ...doc, dataUrl: "" }));
+        localStorage.setItem('muhas_pulse_documents', JSON.stringify(metaOnlyDocs));
+      }
+    }
   }, [documents]);
 
   useEffect(() => {
     localStorage.setItem('muhas_pulse_news', JSON.stringify(news));
   }, [news]);
+
+  const handleUpdateConfig = (newConfig: Partial<SystemConfig>) => {
+    setConfig(prev => {
+      const updated = { ...prev, ...newConfig };
+      localStorage.setItem('muhas_pulse_config', JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   // Handle active session save
   useEffect(() => {
@@ -519,7 +559,7 @@ export default function App() {
             Dear ${studentObj.firstName},<br><br>
             An administrator has responded to your <strong>${r.sector}</strong> ticket with the following feedback:<br><br>
             <em>"${replyText}"</em><br><br>
-            Log in to the console to view full conversation histories.<br><br>
+            Log in to the home dashboard to view full conversation histories.<br><br>
             Sincerely,<br>
             Desk Administration Office
           `;
@@ -1095,7 +1135,7 @@ export default function App() {
                                 setRegisterWarningFields([]);
                               }
                             }}
-                            placeholder="Middle"
+                            placeholder="Gabriel"
                             className={`w-full bg-slate-50 dark:bg-slate-950 border ${
                               registerWarningFields.includes('regMiddle') 
                                 ? 'border-red-500 ring-1 ring-red-500' 
@@ -1116,7 +1156,7 @@ export default function App() {
                                 setRegisterWarningFields([]);
                               }
                             }}
-                            placeholder=" Mwansa"
+                            placeholder="SHIRIMA"
                             className={`w-full bg-slate-50 dark:bg-slate-950 border ${
                               registerWarningFields.includes('regLast') 
                                 ? 'border-red-500 ring-1 ring-red-500' 
@@ -1437,7 +1477,7 @@ export default function App() {
                 {news.length > 0 && config.tickerSpeed !== 'paused' && (
                   <div className={`relative w-full py-2 bg-gradient-to-r ${accentGradient} text-white font-semibold text-xs rounded-full shadow overflow-hidden flex items-center`}>
                     <div className="absolute left-0 top-0 bottom-0 bg-slate-900 text-[9px] font-extrabold uppercase px-3.5 tracking-wider flex items-center rounded-l-full">
-                      Pulse Ticker
+                      News Ticker
                     </div>
                     <div className="flex-1 overflow-hidden relative h-full flex items-center ml-24 pr-4">
                       <motion.div
@@ -1481,7 +1521,7 @@ export default function App() {
                     reports={reports}
                     passwordResets={passwordResets}
                     documents={documents}
-                    onUpdateConfig={setConfig}
+                    onUpdateConfig={handleUpdateConfig}
                     onUpdateUserRole={handleUserRoleUpdate}
                     onAddAnnouncement={handleAddAnnouncement}
                     onAddNews={handleAddNews}
@@ -1543,7 +1583,16 @@ export default function App() {
               {/* Floating Chat action bubble (Students only) */}
               {currentUser.role === 'user' && (
                 <motion.button
-                  whileHover={{ scale: 1.05 }}
+                  animate={{
+                    y: [0, -10, 0],
+                    scale: [1, 1.05, 1],
+                  }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                  whileHover={{ scale: 1.15, y: -12 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => {
                     setIsChatOpen(true);
@@ -1577,7 +1626,7 @@ export default function App() {
             onClose={() => setIsSettingsOpen(false)}
             currentUser={currentUser}
             config={config}
-            onUpdateConfig={setConfig}
+            onUpdateConfig={handleUpdateConfig}
             onUpdateUser={(updated) => {
               setUsers(prev => prev.map(u => u.regNo === currentUser!.regNo ? { ...u, ...updated } : u));
             }}

@@ -76,7 +76,7 @@ export const INITIAL_USERS: User[] = [
   {
     firstName: "Baraka",
     middleName: "Gabriel",
-    lastName: "Gabriel",
+    lastName: "SHIRIMA",
     gender: "Male",
     regNo: "2025-04-00000",
     course: "Doctor of Medicine",

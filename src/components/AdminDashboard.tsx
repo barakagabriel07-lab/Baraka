@@ -186,7 +186,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-extrabold text-slate-900 dark:text-slate-50 font-sans tracking-tight">
-              Control Console
+              Control Home
             </h1>
             <span className={`px-2.5 py-0.5 text-[10px] font-extrabold uppercase rounded-full ${
               isProg ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-400' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400'
@@ -235,7 +235,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           if (tab === 'identity' && !isProg) return null;
 
           const active = activeTab === tab;
-          const label = tab === 'home' ? '🏠 Console' :
+          const label = tab === 'home' ? '🏠 Home' :
                         tab === 'health' ? '🏥 Health' :
                         tab === 'academic' ? '📚 Academic' :
                         tab === 'social' ? '🤝 Welfare' :
