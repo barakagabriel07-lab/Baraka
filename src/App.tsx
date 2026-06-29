@@ -39,6 +39,9 @@ import {
   EmailPreviewModal, 
   SoundEffects 
 } from './components/CommonUI';
+import { auth, db } from './firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 
 import { UserDashboard } from './components/UserDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
