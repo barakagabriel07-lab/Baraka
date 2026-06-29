@@ -151,7 +151,7 @@ export const DEFAULT_CONFIG: SystemConfig = {
   customGreeting: "Welcome to MUHAS PULSE",
   allowMultipleProgrammers: true,
   siteName: "MUHAS PULSE",
-  siteLogo: null
+  siteLogo: "/icon-512.png"
 };
 
 export const INITIAL_NEWS = [

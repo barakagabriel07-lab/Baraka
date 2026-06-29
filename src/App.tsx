@@ -271,7 +271,16 @@ export default function App() {
     // 1. Config System Listener
     const unsubConfig = onSnapshot(doc(db, "config", "system_config"), async (docSnap) => {
       if (docSnap.exists()) {
-        setConfig(docSnap.data() as SystemConfig);
+        const data = docSnap.data() as SystemConfig;
+        if (!data.siteLogo || data.siteLogo.includes('muhas_pulse_logo') || data.siteLogo === "") {
+          data.siteLogo = "/icon-512.png";
+          try {
+            await setDoc(doc(db, "config", "system_config"), data);
+          } catch (e) {
+            console.error("Auto-logo migration failed:", e);
+          }
+        }
+        setConfig(data);
       } else {
         try {
           await setDoc(doc(db, "config", "system_config"), DEFAULT_CONFIG);
