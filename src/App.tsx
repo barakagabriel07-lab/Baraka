@@ -2115,26 +2115,6 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Beautiful Light Mode Attractive Banner at the Bottom */}
-                <div className="p-5 rounded-2xl bg-white dark:bg-slate-950 border border-slate-150 dark:border-slate-850/60 shadow-sm flex flex-col sm:flex-row items-center gap-6 overflow-hidden">
-                  <div className="flex-1 space-y-2">
-                    <h4 className="text-sm font-black text-slate-900 dark:text-slate-100 flex items-center gap-1.5 font-sans">
-                      🎓 Shaping the Future of Healthcare
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
-                      MUHAS Student Network connects medical, nursing, and allied health professionals across Tanzania. Stay informed, request password bypasses, collaborate anonymously, and submit support reports on welfare or academic logistics instantly.
-                    </p>
-                  </div>
-                  <div className="w-full sm:w-48 h-28 rounded-xl overflow-hidden shrink-0 border border-slate-150/80 dark:border-slate-850">
-                    <img 
-                      src="/src/assets/images/muhas_portal_footer_1782656605453.jpg" 
-                      alt="MUHAS Allied Students illustration" 
-                      className="w-full h-full object-cover select-none"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                </div>
-
                 {/* Inline workspace footer */}
                 <footer className="py-4 border-t border-slate-200/40 dark:border-slate-800/20 text-center text-[10px] text-slate-400 dark:text-slate-500 font-mono tracking-wide">
                   © 2026 {config.siteName}. All rights reserved.
