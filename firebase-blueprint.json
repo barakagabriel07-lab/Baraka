@@ -1,0 +1,198 @@
+{
+  "entities": {
+    "Config": {
+      "title": "SystemConfig",
+      "description": "Global settings and configuration parameters for MUHAS Pulse",
+      "type": "object",
+      "properties": {
+        "siteName": { "type": "string" },
+        "domainSuffix": { "type": "string" },
+        "allowSelfReg": { "type": "boolean" },
+        "enableChat": { "type": "boolean" },
+        "enableVoiceHelp": { "type": "boolean" }
+      },
+      "required": ["siteName", "domainSuffix", "allowSelfReg", "enableChat", "enableVoiceHelp"]
+    },
+    "User": {
+      "title": "User",
+      "description": "MUHAS Pulse member accounts containing registration, profiles, and authorization roles",
+      "type": "object",
+      "properties": {
+        "regNo": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "password": { "type": "string" },
+        "firstName": { "type": "string" },
+        "middleName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "role": { "type": "string", "enum": ["student", "programmer", "staff"] },
+        "course": { "type": "string" },
+        "year": { "type": "string" },
+        "phone": { "type": "string" },
+        "chatAlias": { "type": "string" },
+        "status": { "type": "string" },
+        "adminRole": { "type": "string" }
+      },
+      "required": ["regNo", "email", "password", "firstName", "lastName", "role"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "Student tickets filed for academic, social, or health support",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "regNo": { "type": "string" },
+        "name": { "type": "string" },
+        "sector": { "type": "string", "enum": ["academic", "social", "health"] },
+        "text": { "type": "string" },
+        "time": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "answered"] },
+        "reply": { "type": "string" },
+        "replyTime": { "type": "string" },
+        "attachmentName": { "type": "string" },
+        "attachmentData": { "type": "string" }
+      },
+      "required": ["id", "regNo", "name", "sector", "text", "time", "status"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Important announcements broadcasted to all students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "time": { "type": "string" }
+      },
+      "required": ["id", "text", "time"]
+    },
+    "PasswordReset": {
+      "title": "PasswordReset",
+      "description": "Reset requests initiated by students and approved by administrators",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "regNo": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "resolved"] },
+        "resolvedTime": { "type": "string" }
+      },
+      "required": ["id", "regNo", "name", "email", "status"]
+    },
+    "SystemNotification": {
+      "title": "SystemNotification",
+      "description": "Real-time alerts broadcasted to students or administrators",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "audience": { "type": "string" },
+        "kind": { "type": "string" },
+        "text": { "type": "string" },
+        "time": { "type": "string" },
+        "seenBy": { "type": "array" }
+      },
+      "required": ["id", "audience", "kind", "text", "time", "seenBy"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Messages sent in public lobbies or individual direct messages",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "text": { "type": "string" },
+        "time": { "type": "string" },
+        "avatar": { "type": "string" },
+        "attachment": { "type": "string" },
+        "attachmentType": { "type": "string" },
+        "regNo": { "type": "string" },
+        "fromRegNo": { "type": "string" },
+        "toRegNo": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "name", "text", "time"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "Public comments or anonymous/alias suggestions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "regNo": { "type": "string" },
+        "name": { "type": "string" },
+        "text": { "type": "string" },
+        "time": { "type": "string" }
+      },
+      "required": ["id", "regNo", "name", "text", "time"]
+    },
+    "DocumentMaterial": {
+      "title": "DocumentMaterial",
+      "description": "Uploaded academic syllabi or operational files",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "time": { "type": "string" },
+        "fileName": { "type": "string" },
+        "dataUrl": { "type": "string" }
+      },
+      "required": ["id", "title", "category", "uploadedBy", "time", "fileName", "dataUrl"]
+    },
+    "NewsTicker": {
+      "title": "NewsTicker",
+      "description": "A ticker banner list containing hot updates and scrolling headlines",
+      "type": "object",
+      "properties": {
+        "list": { "type": "array" }
+      },
+      "required": ["list"]
+    }
+  },
+  "firestore": {
+    "/config/{configId}": {
+      "schema": "Config",
+      "description": "Global settings for the application layout"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles indexed by lowercase registration number"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "Support tickets submitted by students"
+    },
+    "/announcements/{announcementId}": {
+      "schema": "Announcement",
+      "description": "System bulletins visible on the home dashboard"
+    },
+    "/passwordResets/{resetId}": {
+      "schema": "PasswordReset",
+      "description": "Ticketing for forgotten credentials"
+    },
+    "/notifications/{notifId}": {
+      "schema": "SystemNotification",
+      "description": "Audience specific alerts and indicators"
+    },
+    "/groupChat/{msgId}": {
+      "schema": "ChatMessage",
+      "description": "Collaborative messages sent in the general group lobby"
+    },
+    "/directChats/{msgId}": {
+      "schema": "ChatMessage",
+      "description": "Direct chat logs sent between two users"
+    },
+    "/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Public feedback and suggestions stream"
+    },
+    "/documents/{docId}": {
+      "schema": "DocumentMaterial",
+      "description": "Resource files downloadable by students"
+    },
+    "/news/{newsId}": {
+      "schema": "NewsTicker",
+      "description": "Global ticker messages"
+    }
+  }
+}

@@ -5,6 +5,26 @@
 
 import React, { useState, useEffect, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { auth, db } from './firebase';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut,
+  onAuthStateChanged
+} from 'firebase/auth';
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc,
+  onSnapshot, 
+  query, 
+  orderBy,
+  getDocs,
+  where
+} from 'firebase/firestore';
 import { 
   Bell, HelpCircle, Shield, Globe, Terminal, Volume2, 
   Settings, LogOut, Lock, Mail, CheckCircle2, MessageSquare, 
@@ -39,14 +59,58 @@ import {
   EmailPreviewModal, 
   SoundEffects 
 } from './components/CommonUI';
-import { auth, db } from './firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
 
 import { UserDashboard } from './components/UserDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ChatModal } from './components/ChatModal';
 import { SettingsModal } from './components/SettingsModal';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 export default function App() {
   // Global States persisted to LocalStorage
@@ -196,6 +260,144 @@ export default function App() {
     ? users.find(u => u.regNo && sessionUserReg && u.regNo.toLowerCase() === sessionUserReg.toLowerCase()) || null 
     : null;
 
+  // Synchronize Firestore Database in Real-Time
+  useEffect(() => {
+    // 1. Config System Listener
+    const unsubConfig = onSnapshot(doc(db, "config", "system_config"), async (docSnap) => {
+      if (docSnap.exists()) {
+        setConfig(docSnap.data() as SystemConfig);
+      } else {
+        try {
+          await setDoc(doc(db, "config", "system_config"), DEFAULT_CONFIG);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, "config/system_config");
+        }
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, "config/system_config"));
+
+    // 2. Users Listener
+    const unsubUsers = onSnapshot(collection(db, "users"), async (snapshot) => {
+      if (snapshot.empty) {
+        for (const u of INITIAL_USERS) {
+          try {
+            await setDoc(doc(db, "users", u.regNo.toLowerCase()), u);
+          } catch (e) {
+            handleFirestoreError(e, OperationType.WRITE, `users/${u.regNo.toLowerCase()}`);
+          }
+        }
+      } else {
+        const uList = snapshot.docs.map(doc => doc.data() as User);
+        setUsers(uList);
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, "users"));
+
+    // 3. Reports/Tickets Listener
+    const unsubReports = onSnapshot(collection(db, "reports"), (snapshot) => {
+      const rList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Report);
+      setReports(rList);
+    }, (err) => handleFirestoreError(err, OperationType.GET, "reports"));
+
+    // 4. Announcements Listener
+    const unsubAnnouncements = onSnapshot(collection(db, "announcements"), (snapshot) => {
+      const aList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Announcement);
+      setAnnouncements(aList);
+    }, (err) => handleFirestoreError(err, OperationType.GET, "announcements"));
+
+    // 5. Password Resets Listener
+    const unsubResets = onSnapshot(collection(db, "passwordResets"), (snapshot) => {
+      const prList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as PasswordReset);
+      setPasswordResets(prList);
+    }, (err) => handleFirestoreError(err, OperationType.GET, "passwordResets"));
+
+    // 6. Notifications Listener
+    const unsubNotifs = onSnapshot(collection(db, "notifications"), (snapshot) => {
+      const nList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as SystemNotification);
+      setNotifications(nList);
+    }, (err) => handleFirestoreError(err, OperationType.GET, "notifications"));
+
+    // 7. Group Chat Messages Listener
+    const qGroupChat = query(collection(db, "groupChat"), orderBy("timestamp", "asc"));
+    const unsubGroupChat = onSnapshot(qGroupChat, (snapshot) => {
+      const gcList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as ChatMessage);
+      setGroupChat(gcList);
+    }, (err) => {
+      console.warn("Groupchat ordered query failed, falling back to unordered snap", err);
+      onSnapshot(collection(db, "groupChat"), (snapshot) => {
+        const gcList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as ChatMessage);
+        setGroupChat(gcList);
+      }, (e) => handleFirestoreError(e, OperationType.GET, "groupChat"));
+    });
+
+    // 8. Direct Chat Messages Listener
+    const unsubDirectChats = onSnapshot(collection(db, "directChats"), (snapshot) => {
+      const grouped: Record<string, ChatMessage[]> = {};
+      snapshot.docs.forEach(doc => {
+        const msg = doc.data() as ChatMessage;
+        if (msg.fromRegNo && msg.toRegNo) {
+          const key = [msg.fromRegNo, msg.toRegNo].sort().join('|');
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push({ id: doc.id, ...msg });
+        }
+      });
+      Object.keys(grouped).forEach(k => {
+        grouped[k].sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0));
+      });
+      setDirectChats(grouped);
+    }, (err) => handleFirestoreError(err, OperationType.GET, "directChats"));
+
+    // 9. Comments Listener
+    const unsubComments = onSnapshot(collection(db, "comments"), (snapshot) => {
+      const cList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Comment);
+      setComments(cList);
+    }, (err) => handleFirestoreError(err, OperationType.GET, "comments"));
+
+    // 10. Documents Listener
+    const unsubDocs = onSnapshot(collection(db, "documents"), (snapshot) => {
+      const dList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as DocumentMaterial);
+      setDocuments(dList);
+    }, (err) => handleFirestoreError(err, OperationType.GET, "documents"));
+
+    // 11. News/Ticker Listener
+    const unsubNews = onSnapshot(doc(db, "news", "ticker"), async (docSnap) => {
+      if (docSnap.exists()) {
+        setNews(docSnap.data().list);
+      } else {
+        try {
+          await setDoc(doc(db, "news", "ticker"), { list: INITIAL_NEWS });
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, "news/ticker");
+        }
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, "news/ticker"));
+
+    // 12. Auth state change listener
+    const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser && firebaseUser.email) {
+        const userQuery = query(collection(db, "users"), where("email", "==", firebaseUser.email));
+        const querySnap = await getDocs(userQuery);
+        if (!querySnap.empty) {
+          const userData = querySnap.docs[0].data() as User;
+          setSessionUserReg(userData.regNo);
+        }
+      }
+    });
+
+    return () => {
+      unsubConfig();
+      unsubUsers();
+      unsubReports();
+      unsubAnnouncements();
+      unsubResets();
+      unsubNotifs();
+      unsubGroupChat();
+      unsubDirectChats();
+      unsubComments();
+      unsubDocs();
+      unsubNews();
+      unsubAuth();
+    };
+  }, []);
+
   // Persistances trigger
   useEffect(() => {
     localStorage.setItem('muhas_pulse_config', JSON.stringify(config));
@@ -259,12 +461,13 @@ export default function App() {
     localStorage.setItem('muhas_pulse_news', JSON.stringify(news));
   }, [news]);
 
-  const handleUpdateConfig = (newConfig: Partial<SystemConfig>) => {
-    setConfig(prev => {
-      const updated = { ...prev, ...newConfig };
-      localStorage.setItem('muhas_pulse_config', JSON.stringify(updated));
-      return updated;
-    });
+  const handleUpdateConfig = async (newConfig: Partial<SystemConfig>) => {
+    try {
+      const updated = { ...config, ...newConfig };
+      await setDoc(doc(db, "config", "system_config"), updated);
+    } catch (e) {
+      console.error("Config update failed", e);
+    }
   };
 
   // Handle active session save
@@ -330,7 +533,7 @@ export default function App() {
   };
 
   // Auth Operations
-  const handleSignIn = (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
     setLoginWarningFields([]);
@@ -346,12 +549,38 @@ export default function App() {
       return;
     }
 
-    const match = users.find(u => u.regNo && loginRegNo && u.regNo.toLowerCase() === loginRegNo.toLowerCase());
-    if (!match || match.password !== loginPassword) {
+    const match = users.find(u => 
+      (u.regNo && loginRegNo && u.regNo.toLowerCase() === loginRegNo.toLowerCase()) || 
+      (u.email && loginRegNo && u.email.toLowerCase() === loginRegNo.toLowerCase())
+    );
+
+    if (!match) {
       setLoginWarningFields(['loginRegNo', 'loginPassword']);
       setLoginError("⚠️ Incorrect Credentials! The registration number or password entered is invalid.");
       showToast("❌ Invalid sign in details. Check both fields.");
       return;
+    }
+
+    try {
+      await signInWithEmailAndPassword(auth, match.email, loginPassword);
+    } catch (err: any) {
+      console.warn("Firebase sign-in failed, attempting seed migration fallback", err);
+      if (match.password === loginPassword) {
+        try {
+          await createUserWithEmailAndPassword(auth, match.email, loginPassword);
+        } catch (createErr: any) {
+          console.error("Seed auth creation failed", createErr);
+          setLoginWarningFields(['loginRegNo', 'loginPassword']);
+          setLoginError(`⚠️ Authentication Error: ${createErr.message}`);
+          showToast("❌ Authentication system failure.");
+          return;
+        }
+      } else {
+        setLoginWarningFields(['loginRegNo', 'loginPassword']);
+        setLoginError("⚠️ Incorrect Credentials! The registration number or password entered is invalid.");
+        showToast("❌ Invalid sign in details. Check both fields.");
+        return;
+      }
     }
 
     setSessionUserReg(match.regNo);
@@ -419,20 +648,7 @@ export default function App() {
       showToast("❌ This email address is already taken.");
       return;
     }
-await createUserWithEmailAndPassword(auth, regEmail, regPassword);
 
-await setDoc(doc(db, "users", regRegNo), {
-  firstName: regFirst,
-  middleName: regMiddle,
-  lastName: regLast,
-  gender: regGender,
-  regNo: regRegNo,
-  course: regCourse,
-  email: regEmail,
-  phone: regPhone,
-  role: "user",
-  createdAt: new Date().toISOString()
-});
     const newUser: User = {
       firstName: regFirst,
       middleName: regMiddle,
@@ -449,7 +665,15 @@ await setDoc(doc(db, "users", regRegNo), {
       chatAlias: regFirst
     };
 
-    setUsers(prev => [...prev, newUser]);
+    try {
+      await createUserWithEmailAndPassword(auth, regEmail, regPassword);
+      await setDoc(doc(db, "users", regRegNo.toLowerCase()), newUser);
+    } catch (err: any) {
+      console.error("Auth registration failed", err);
+      setRegisterError(`⚠️ Registration Error: ${err.message}`);
+      showToast("❌ Registration failed in authentication engine.");
+      return;
+    }
     
     // Send SMTP registration confirmation preview
     const subject = `🎉 Congratulations — your ${config.siteName} account is active!`;
@@ -476,7 +700,7 @@ await setDoc(doc(db, "users", regRegNo), {
     setAuthTab('login');
   };
 
-  const handleForgotPasswordRequest = (e: React.FormEvent) => {
+  const handleForgotPasswordRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotReg || !forgotMail) {
       showToast("Please provide both your registration number and email.");
@@ -495,8 +719,9 @@ await setDoc(doc(db, "users", regRegNo), {
       return;
     }
 
+    const newRequestId = Math.random().toString(36).slice(2, 9);
     const newRequest: PasswordReset = {
-      id: Math.random().toString(36).slice(2, 9),
+      id: newRequestId,
       regNo: match.regNo,
       name: `${match.firstName} ${match.lastName}`,
       email: match.email,
@@ -505,38 +730,48 @@ await setDoc(doc(db, "users", regRegNo), {
       resolvedTime: null
     };
 
-    setPasswordResets(prev => [...prev, newRequest]);
-    
-    // Broadcast notifications to administrators
+    const newNotifId = Math.random().toString(36).slice(2, 9);
     const newNotif: SystemNotification = {
-      id: Math.random().toString(36).slice(2, 9),
+      id: newNotifId,
       audience: 'staff',
       kind: 'reset',
       text: `Password reset request flagged by student ${match.firstName} ${match.lastName} (${match.regNo}).`,
       time: new Date().toLocaleString(),
       seenBy: []
     };
-    setNotifications(prev => [...prev, newNotif]);
 
-    setIsForgotPwdOpen(false);
-    setForgotReg('');
-    setForgotMail('');
-    showToast("Reset ticket routed to administrators. Check WhatsApp soon.");
+    try {
+      await setDoc(doc(db, "passwordResets", newRequestId), newRequest);
+      await setDoc(doc(db, "notifications", newNotifId), newNotif);
+
+      setIsForgotPwdOpen(false);
+      setForgotReg('');
+      setForgotMail('');
+      showToast("Reset ticket routed to administrators. Check WhatsApp soon.");
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // App Level Operations
-  const handleLogOut = () => {
-    setSessionUserReg(null);
-    setIsLogoutConfirmOpen(false);
-    setIsProfileMenuOpen(false);
-    showToast("Successfully logged out of your session.");
+  const handleLogOut = async () => {
+    try {
+      await signOut(auth);
+      setSessionUserReg(null);
+      setIsLogoutConfirmOpen(false);
+      setIsProfileMenuOpen(false);
+      showToast("Successfully logged out of your session.");
+    } catch (e: any) {
+      console.error("Signout failed", e);
+    }
   };
 
-  const handleCreateReport = (sector: 'health' | 'academic' | 'social', text: string, file: { name: string; dataUrl: string } | null) => {
+  const handleCreateReport = async (sector: 'health' | 'academic' | 'social', text: string, file: { name: string; dataUrl: string } | null) => {
     if (!currentUser) return;
 
+    const newReportId = Math.random().toString(36).slice(2, 9);
     const newReport: Report = {
-      id: Math.random().toString(36).slice(2, 9),
+      id: newReportId,
       regNo: currentUser.regNo,
       name: `${currentUser.firstName} ${currentUser.lastName}`,
       sector,
@@ -549,140 +784,150 @@ await setDoc(doc(db, "users", regRegNo), {
       attachmentData: file ? file.dataUrl : null
     };
 
-    setReports(prev => [...prev, newReport]);
+    try {
+      await setDoc(doc(db, "reports", newReportId), newReport);
 
-    // Push Notification for staff
+      // Push Notification for staff
+      const newNotifId = Math.random().toString(36).slice(2, 9);
+      const newNotif: SystemNotification = {
+        id: newNotifId,
+        audience: 'staff',
+        kind: sector,
+        text: `${currentUser.firstName} ${currentUser.lastName} filed a new ${sector} report.`,
+        time: new Date().toLocaleString(),
+        seenBy: []
+      };
+      await setDoc(doc(db, "notifications", newNotifId), newNotif);
+      showToast(`${sector.toUpperCase()} official report filed.`);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAdminReplyToReport = async (reportId: string, replyText: string) => {
+    const r = reports.find(item => item.id === reportId);
+    if (!r) return;
+
+    const studentObj = users.find(u => u.regNo === r.regNo);
+    if (studentObj) {
+      const subject = `💬 Update on your ${r.sector} ticket — ${config.siteName}`;
+      const bodyHtml = `
+        Dear ${studentObj.firstName},<br><br>
+        An administrator has responded to your <strong>${r.sector}</strong> ticket with the following feedback:<br><br>
+        <em>"${replyText}"</em><br><br>
+        Log in to the home dashboard to view full conversation histories.<br><br>
+        Sincerely,<br>
+        Desk Administration Office
+      `;
+      sendStudentEmailSimulation(studentObj.email, subject, bodyHtml);
+    }
+
+    // Notify Student
+    const newNotifId = Math.random().toString(36).slice(2, 9);
     const newNotif: SystemNotification = {
-      id: Math.random().toString(36).slice(2, 9),
-      audience: 'staff',
-      kind: sector,
-      text: `${currentUser.firstName} ${currentUser.lastName} filed a new ${sector} report.`,
+      id: newNotifId,
+      audience: r.regNo,
+      kind: 'reply',
+      text: `Representative left feedback on your ${r.sector} file: "${replyText.slice(0, 45)}..."`,
       time: new Date().toLocaleString(),
       seenBy: []
     };
-    setNotifications(prev => [...prev, newNotif]);
-    showToast(`${sector.toUpperCase()} official report filed.`);
+
+    try {
+      await setDoc(doc(db, "notifications", newNotifId), newNotif);
+      await updateDoc(doc(db, "reports", reportId), {
+        status: 'answered',
+        reply: replyText,
+        replyTime: new Date().toLocaleString()
+      });
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleAdminReplyToReport = (reportId: string, replyText: string) => {
-    setReports(prev => prev.map(r => {
-      if (r.id === reportId) {
-        // Send email alert simulation to the recipient student
-        const studentObj = users.find(u => u.regNo === r.regNo);
-        if (studentObj) {
-          const subject = `💬 Update on your ${r.sector} ticket — ${config.siteName}`;
-          const bodyHtml = `
-            Dear ${studentObj.firstName},<br><br>
-            An administrator has responded to your <strong>${r.sector}</strong> ticket with the following feedback:<br><br>
-            <em>"${replyText}"</em><br><br>
-            Log in to the home dashboard to view full conversation histories.<br><br>
-            Sincerely,<br>
-            Desk Administration Office
-          `;
-          sendStudentEmailSimulation(studentObj.email, subject, bodyHtml);
-        }
-
-        // Notify Student
-        const newNotif: SystemNotification = {
-          id: Math.random().toString(36).slice(2, 9),
-          audience: r.regNo,
-          kind: 'reply',
-          text: `Representative left feedback on your ${r.sector} file: "${replyText.slice(0, 45)}..."`,
-          time: new Date().toLocaleString(),
-          seenBy: []
-        };
-        setNotifications(prevNotif => [...prevNotif, newNotif]);
-
-        return {
-          ...r,
-          status: 'answered',
-          reply: replyText,
-          replyTime: new Date().toLocaleString()
-        };
-      }
-      return r;
-    }));
-  };
-
-  const handleResolveResetRequest = (resetId: string, tempPwd: string) => {
+  const handleResolveResetRequest = async (resetId: string, tempPwd: string) => {
     const request = passwordResets.find(r => r.id === resetId);
     if (!request) return;
 
-    // Update user credential
-    setUsers(prev => prev.map(u => {
-      if (u.regNo === request.regNo) {
-        // Mail notification
-        const subject = `🔑 Temporary Security Credentials — ${config.siteName}`;
-        const bodyHtml = `
-          Dear ${u.firstName},<br><br>
-          An administrator has resolved your password ticket.<br><br>
-          Your temporary credential passcode is configured to: <strong>${tempPwd}</strong><br><br>
-          Please use this to log in, and securely configure a custom password inside System Settings.<br><br>
-          Warmly,<br>
-          Coordinators Desk
-        `;
-        sendStudentEmailSimulation(u.email, subject, bodyHtml);
+    const u = users.find(item => item.regNo === request.regNo);
+    if (u) {
+      const subject = `🔑 Temporary Security Credentials — ${config.siteName}`;
+      const bodyHtml = `
+        Dear ${u.firstName},<br><br>
+        An administrator has resolved your password ticket.<br><br>
+        Your temporary credential passcode is configured to: <strong>${tempPwd}</strong><br><br>
+        Please use this to log in, and securely configure a custom password inside System Settings.<br><br>
+        Warmly,<br>
+        Coordinators Desk
+      `;
+      sendStudentEmailSimulation(u.email, subject, bodyHtml);
 
-        return { ...u, password: tempPwd };
+      try {
+        await updateDoc(doc(db, "users", u.regNo.toLowerCase()), { password: tempPwd });
+      } catch (e) {
+        console.error(e);
       }
-      return u;
-    }));
+    }
 
-    // Update Request status
-    setPasswordResets(prev => prev.map(r => {
-      if (r.id === resetId) {
-        return { ...r, status: 'resolved', resolvedTime: new Date().toLocaleString() };
-      }
-      return r;
-    }));
+    try {
+      await updateDoc(doc(db, "passwordResets", resetId), {
+        status: 'resolved',
+        resolvedTime: new Date().toLocaleString()
+      });
 
-    // Notify student
-    const newNotif: SystemNotification = {
-      id: Math.random().toString(36).slice(2, 9),
-      audience: request.regNo,
-      kind: 'reset',
-      text: `Your password ticket has been authorized. Temporary key assigned.`,
-      time: new Date().toLocaleString(),
-      seenBy: []
-    };
-    setNotifications(prev => [...prev, newNotif]);
+      const newNotifId = Math.random().toString(36).slice(2, 9);
+      const newNotif: SystemNotification = {
+        id: newNotifId,
+        audience: request.regNo,
+        kind: 'reset',
+        text: `Your password ticket has been authorized. Temporary key assigned.`,
+        time: new Date().toLocaleString(),
+        seenBy: []
+      };
+      await setDoc(doc(db, "notifications", newNotifId), newNotif);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleForceDirectReset = (regNo: string, tempPwd: string) => {
-    setUsers(prev => prev.map(u => {
-      if (u.regNo === regNo) {
-        const subject = `🔑 Security Bypass Notification — ${config.siteName}`;
-        const bodyHtml = `
-          Dear ${u.firstName},<br><br>
-          Administrator forces a credentials override bypass on your profile.<br><br>
-          Your login credential passcode is configured to: <strong>${tempPwd}</strong><br><br>
-          Consider updating this once signed into settings.<br><br>
-          Sincerely,<br>
-          Governance Operations Desk
-        `;
-        sendStudentEmailSimulation(u.email, subject, bodyHtml);
+  const handleForceDirectReset = async (regNo: string, tempPwd: string) => {
+    const u = users.find(item => item.regNo === regNo);
+    if (!u) return;
 
-        return { ...u, password: tempPwd };
-      }
-      return u;
-    }));
+    const subject = `🔑 Security Bypass Notification — ${config.siteName}`;
+    const bodyHtml = `
+      Dear ${u.firstName},<br><br>
+      Administrator forces a credentials override bypass on your profile.<br><br>
+      Your login credential passcode is configured to: <strong>${tempPwd}</strong><br><br>
+      Consider updating this once signed into settings.<br><br>
+      Sincerely,<br>
+      Governance Operations Desk
+    `;
+    sendStudentEmailSimulation(u.email, subject, bodyHtml);
 
-    // Notify student
-    const newNotif: SystemNotification = {
-      id: Math.random().toString(36).slice(2, 9),
-      audience: regNo,
-      kind: 'reset',
-      text: `Administrator forced a credential reset on your account profile.`,
-      time: new Date().toLocaleString(),
-      seenBy: []
-    };
-    setNotifications(prev => [...prev, newNotif]);
+    try {
+      await updateDoc(doc(db, "users", regNo.toLowerCase()), { password: tempPwd });
+
+      const newNotifId = Math.random().toString(36).slice(2, 9);
+      const newNotif: SystemNotification = {
+        id: newNotifId,
+        audience: regNo,
+        kind: 'reset',
+        text: `Administrator forced a credential reset on your account profile.`,
+        time: new Date().toLocaleString(),
+        seenBy: []
+      };
+      await setDoc(doc(db, "notifications", newNotifId), newNotif);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleUploadDocument = (title: string, category: string, fileName: string, dataUrl: string) => {
+  const handleUploadDocument = async (title: string, category: string, fileName: string, dataUrl: string) => {
     const authorName = currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : 'Administration';
+    const newDocId = Math.random().toString(36).slice(2, 9);
     const newDoc: DocumentMaterial = {
-      id: Math.random().toString(36).slice(2, 9),
+      id: newDocId,
       title,
       category,
       uploadedBy: authorName,
@@ -690,38 +935,72 @@ await setDoc(doc(db, "users", regRegNo), {
       fileName,
       dataUrl
     };
-    setDocuments(prev => [...prev, newDoc]);
+    try {
+      await setDoc(doc(db, "documents", newDocId), newDoc);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleDeleteDocument = (docId: string) => {
-    setDocuments(prev => prev.filter(d => d.id !== docId));
-    showToast("Document deleted from resources.");
+  const handleDeleteDocument = async (docId: string) => {
+    try {
+      await deleteDoc(doc(db, "documents", docId));
+      showToast("Document deleted from resources.");
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleAddNews = (text: string) => {
-    setNews(prev => [...prev, text]);
+  const handleRemoveUser = async (regNo: string) => {
+    try {
+      await deleteDoc(doc(db, "users", regNo.toLowerCase()));
+      showToast(`User with Registry No. ${regNo} has been removed.`);
+    } catch (e) {
+      console.error(e);
+      showToast(`Failed to remove user: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
-  const handleRemoveNews = (index: number) => {
-    setNews(prev => prev.filter((_, i) => i !== index));
-    showToast("News ticker banner headline removed.");
+  const handleAddNews = async (text: string) => {
+    try {
+      const updatedList = [...news, text];
+      await setDoc(doc(db, "news", "ticker"), { list: updatedList });
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleAddAnnouncement = (text: string) => {
+  const handleRemoveNews = async (index: number) => {
+    try {
+      const updatedList = news.filter((_, i) => i !== index);
+      await setDoc(doc(db, "news", "ticker"), { list: updatedList });
+      showToast("News ticker banner headline removed.");
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAddAnnouncement = async (text: string) => {
+    const newAnnId = Math.random().toString(36).slice(2, 9);
     const newAnn: Announcement = {
-      id: Math.random().toString(36).slice(2, 9),
+      id: newAnnId,
       text,
       time: new Date().toLocaleDateString()
     };
-    setAnnouncements(prev => [...prev, newAnn]);
-    playSynthesizedChime();
+    try {
+      await setDoc(doc(db, "announcements", newAnnId), newAnn);
+      playSynthesizedChime();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleSendChatMessage = (text: string, options?: Partial<ChatMessage>) => {
+  const handleSendChatMessage = async (text: string, options?: Partial<ChatMessage>) => {
     if (!currentUser) return;
 
+    const newMsgId = Math.random().toString(36).slice(2, 9);
     const newMsg: ChatMessage = {
-      id: Math.random().toString(36).slice(2, 9),
+      id: newMsgId,
       name: options?.name || currentUser.firstName,
       text,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -732,58 +1011,63 @@ await setDoc(doc(db, "users", regRegNo), {
       attachmentType: options?.attachmentType
     };
 
-    onAddChatMessage(newMsg, options?.toRegNo);
-  };
-
-  const onAddChatMessage = (msg: ChatMessage, toReg?: string) => {
-    if (toReg) {
-      // DM Message
-      const key = [currentUser!.regNo, toReg].sort().join('|');
-      setDirectChats(prev => {
-        const currentList = prev[key] || [];
-        return {
-          ...prev,
-          [key]: [...currentList, { ...msg, fromRegNo: currentUser!.regNo, toRegNo: toReg }]
+    try {
+      if (options?.toRegNo) {
+        const msgWithDMFields = {
+          ...newMsg,
+          fromRegNo: currentUser.regNo,
+          toRegNo: options.toRegNo,
+          timestamp: Date.now()
         };
-      });
-    } else {
-      // Group lobby Message
-      setGroupChat(prev => [...prev, { ...msg, regNo: currentUser!.regNo }]);
+        await setDoc(doc(db, "directChats", newMsgId), msgWithDMFields);
+      } else {
+        const msgWithGroupFields = {
+          ...newMsg,
+          regNo: currentUser.regNo,
+          timestamp: Date.now()
+        };
+        await setDoc(doc(db, "groupChat", newMsgId), msgWithGroupFields);
+      }
+    } catch (e) {
+      console.error("Chat sending failed", e);
     }
   };
 
-  const handlePostComment = () => {
+  const handlePostComment = async () => {
     if (!currentUser || !commentText.trim()) return;
 
+    const newCommentId = Math.random().toString(36).slice(2, 9);
     const newComment: Comment = {
-      id: Math.random().toString(36).slice(2, 9),
+      id: newCommentId,
       regNo: currentUser.regNo,
       name: currentUser.chatAlias || `${currentUser.firstName} ${currentUser.lastName}`,
       text: commentText.trim(),
       time: new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     };
 
-    setComments(prev => [...prev, newComment]);
-    setCommentText('');
-    showToast("Public feedback comment published.");
+    try {
+      await setDoc(doc(db, "comments", newCommentId), newComment);
+      setCommentText('');
+      showToast("Public feedback comment published.");
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleRenameStudent = (regNo: string, updatedNames: { firstName: string; middleName: string; lastName: string }) => {
-    setUsers(prev => prev.map(u => {
-      if (u.regNo === regNo) {
-        return { ...u, ...updatedNames };
-      }
-      return u;
-    }));
+  const handleRenameStudent = async (regNo: string, updatedNames: { firstName: string; middleName: string; lastName: string }) => {
+    try {
+      await updateDoc(doc(db, "users", regNo.toLowerCase()), updatedNames);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleUserRoleUpdate = (regNo: string, newRole: User['role']) => {
-    setUsers(prev => prev.map(u => {
-      if (u.regNo === regNo) {
-        return { ...u, role: newRole };
-      }
-      return u;
-    }));
+  const handleUserRoleUpdate = async (regNo: string, newRole: User['role']) => {
+    try {
+      await updateDoc(doc(db, "users", regNo.toLowerCase()), { role: newRole });
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const sendStudentEmailSimulation = (to: string, subject: string, bodyHtml: string) => {
@@ -1547,6 +1831,7 @@ await setDoc(doc(db, "users", regRegNo), {
                     onDirectResetPassword={handleForceDirectReset}
                     onUploadDocument={handleUploadDocument}
                     onDeleteDocument={handleDeleteDocument}
+                    onRemoveUser={handleRemoveUser}
                     showToast={showToast}
                   />
                 )}
@@ -1643,8 +1928,12 @@ await setDoc(doc(db, "users", regRegNo), {
             currentUser={currentUser}
             config={config}
             onUpdateConfig={handleUpdateConfig}
-            onUpdateUser={(updated) => {
-              setUsers(prev => prev.map(u => u.regNo === currentUser!.regNo ? { ...u, ...updated } : u));
+            onUpdateUser={async (updated) => {
+              try {
+                await updateDoc(doc(db, "users", currentUser!.regNo.toLowerCase()), updated);
+              } catch (e) {
+                console.error("User profile update failed", e);
+              }
             }}
             allUsers={users}
             onRenameUser={handleRenameStudent}

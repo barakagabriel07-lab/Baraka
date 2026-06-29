@@ -35,6 +35,7 @@ interface AdminDashboardProps {
   onDirectResetPassword: (regNo: string, tempPwd: string) => void;
   onUploadDocument: (title: string, category: string, fileName: string, dataUrl: string) => void;
   onDeleteDocument: (docId: string) => void;
+  onRemoveUser: (regNo: string) => void;
   showToast: (msg: string) => void;
 }
 
@@ -55,12 +56,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDirectResetPassword,
   onUploadDocument,
   onDeleteDocument,
+  onRemoveUser,
   showToast
 }) => {
   const [activeTab, setActiveTab] = useState<'home' | 'health' | 'academic' | 'social' | 'students' | 'resets' | 'materials' | 'news' | 'admins' | 'identity'>('home');
   
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
+  const [confirmingDeleteRegNo, setConfirmingDeleteRegNo] = useState<string | null>(null);
 
   // Form states
   const [announcementText, setAnnouncementText] = useState('');
@@ -542,6 +545,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       >
                         <Mail className="w-4 h-4" />
                       </a>
+
+                      {isProg && student.regNo !== currentUser.regNo && (
+                        confirmingDeleteRegNo === student.regNo ? (
+                          <div className="flex items-center gap-1 bg-red-50 dark:bg-red-950/20 px-2 py-1 rounded-lg border border-red-100 dark:border-red-900/40">
+                            <button
+                              onClick={() => {
+                                onRemoveUser(student.regNo);
+                                setConfirmingDeleteRegNo(null);
+                              }}
+                              className="px-1.5 py-0.5 text-[9px] font-black uppercase text-white bg-red-500 hover:bg-red-600 rounded transition-colors"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => setConfirmingDeleteRegNo(null)}
+                              className="px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmingDeleteRegNo(student.regNo)}
+                            className="p-2 bg-red-50 dark:bg-red-950/20 text-red-500 rounded-full hover:bg-red-100/50 transition-colors"
+                            title="Remove User"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )
+                      )}
                     </div>
                   </div>
                 ))}
@@ -962,6 +995,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             className={`px-2.5 py-1 text-[10px] font-bold text-slate-600 bg-slate-50 rounded-md border border-slate-200`}
                           >
                             Revoke Staff Access
+                          </button>
+                        )}
+
+                        {confirmingDeleteRegNo === u.regNo ? (
+                          <div className="flex items-center gap-1 bg-red-50 dark:bg-red-950/20 px-2 py-0.5 rounded-md border border-red-150">
+                            <button
+                              onClick={() => {
+                                onRemoveUser(u.regNo);
+                                setConfirmingDeleteRegNo(null);
+                              }}
+                              className="px-1.5 py-0.5 text-[9px] font-black uppercase text-white bg-red-600 rounded"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              onClick={() => setConfirmingDeleteRegNo(null)}
+                              className="px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-500 hover:text-slate-700 dark:text-slate-400"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmingDeleteRegNo(u.regNo)}
+                            className="px-2.5 py-1 text-[10px] font-bold text-red-600 bg-red-50 dark:bg-red-950/20 rounded-md border border-red-150 hover:bg-red-100/50"
+                          >
+                            Remove User
                           </button>
                         )}
                       </div>
