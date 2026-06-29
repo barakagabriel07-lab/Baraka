@@ -16,7 +16,7 @@ import {
   getBorderRadiusClass, 
   getGlassmorphismClass 
 } from './CommonUI';
-import { COUNTRIES } from '../data';
+import { COUNTRIES, COURSES } from '../data';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -50,6 +50,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'programmer'>('profile');
   
   // Profile State
+  const [firstName, setFirstName] = useState(currentUser.firstName || '');
+  const [middleName, setMiddleName] = useState(currentUser.middleName || '');
+  const [lastName, setLastName] = useState(currentUser.lastName || '');
+  const [gender, setGender] = useState(currentUser.gender || '');
+  const [course, setCourse] = useState(currentUser.course || '');
   const [chatAlias, setChatAlias] = useState(currentUser.chatAlias || '');
   const [adminRole, setAdminRole] = useState(currentUser.adminRole || '');
   const [phone, setPhone] = useState(currentUser.phone || '');
@@ -110,8 +115,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!phone || !email) {
-      showToast("Contact phone and email cannot be empty.");
+    if (!firstName || !lastName || !phone || !email) {
+      showToast("First name, Last name, phone and email cannot be empty.");
       return;
     }
     if (!/^\d{1,9}$/.test(phone)) {
@@ -120,6 +125,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
 
     const updates: Partial<UserType> = {
+      firstName,
+      middleName,
+      lastName,
+      gender,
+      course,
       phone,
       email,
       countryCode,
@@ -363,6 +373,80 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </p>
                     </div>
                   )}
+
+                  <div className="sm:col-span-2 border-t border-slate-100 dark:border-slate-800/60 pt-4">
+                    <h4 className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">
+                      Personal Profile Information
+                    </h4>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                      First Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      className={`w-full bg-slate-50 dark:bg-slate-950 p-2.5 border border-slate-200 dark:border-slate-800/80 ${radius} text-sm focus:outline-none focus:border-emerald-500`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                      Middle Name
+                    </label>
+                    <input
+                      type="text"
+                      value={middleName}
+                      onChange={(e) => setMiddleName(e.target.value)}
+                      className={`w-full bg-slate-50 dark:bg-slate-950 p-2.5 border border-slate-200 dark:border-slate-800/80 ${radius} text-sm focus:outline-none focus:border-emerald-500`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                      Last Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      className={`w-full bg-slate-50 dark:bg-slate-950 p-2.5 border border-slate-200 dark:border-slate-800/80 ${radius} text-sm focus:outline-none focus:border-emerald-500`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                      Gender <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={gender}
+                      onChange={(e) => setGender(e.target.value)}
+                      className={`w-full bg-slate-50 dark:bg-slate-950 p-2.5 border border-slate-200 dark:border-slate-800/80 ${radius} text-sm focus:outline-none focus:border-emerald-500`}
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Prefer not to say">Prefer not to say</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                      Course Registered <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={course}
+                      onChange={(e) => setCourse(e.target.value)}
+                      className={`w-full bg-slate-50 dark:bg-slate-950 p-2.5 border border-slate-200 dark:border-slate-800/80 ${radius} text-sm focus:outline-none focus:border-emerald-500`}
+                    >
+                      {COURSES.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                      <option value="System Programmer">System Programmer</option>
+                      <option value="Administration">Administration</option>
+                    </select>
+                  </div>
 
                   <div className="sm:col-span-2 border-t border-slate-100 dark:border-slate-800/60 pt-4">
                     <h4 className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">
