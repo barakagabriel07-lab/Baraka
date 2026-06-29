@@ -30,7 +30,7 @@ import {
 import { 
   Bell, HelpCircle, Shield, Globe, Terminal, Volume2, 
   Settings, LogOut, Lock, Mail, CheckCircle2, MessageSquare, 
-  Activity, BookOpen, Download, Eye, EyeOff, X 
+  Activity, BookOpen, Download, Eye, EyeOff, X, Search, Database, RefreshCw, Loader2
 } from 'lucide-react';
 
 import { 
@@ -254,6 +254,10 @@ export default function App() {
   // Comment input
   const [commentText, setCommentText] = useState('');
 
+  // Animation/Loading states for Sign In and Registration
+  const [authLoadingState, setAuthLoadingState] = useState<'signin' | 'register' | null>(null);
+  const [authLoadingMessage, setAuthLoadingMessage] = useState<string>('');
+
   // Category filter for materials view
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('');
 
@@ -282,14 +286,14 @@ export default function App() {
       const uList = snapshot.docs.map(doc => doc.data() as User);
       setUsers(uList);
 
-      // Verify that all INITIAL_USERS exist in the database, if not seed them
-      for (const u of INITIAL_USERS) {
-        const exists = uList.some(ex => ex.regNo && ex.regNo.toLowerCase() === u.regNo.toLowerCase());
-        if (!exists) {
+      // Only seed default users if the collection is completely empty
+      if (snapshot.empty) {
+        console.log("Users collection is empty. Seeding INITIAL_USERS...");
+        for (const u of INITIAL_USERS) {
           try {
             await setDoc(doc(db, "users", u.regNo.toLowerCase()), u);
           } catch (e) {
-            console.error(`Failed to auto-seed essential user ${u.regNo}:`, e);
+            console.error(`Failed to seed user ${u.regNo}:`, e);
           }
         }
       }
@@ -607,6 +611,24 @@ export default function App() {
       return;
     }
 
+    setAuthLoadingState('signin');
+    setAuthLoadingMessage('Establishing handshake with secure database node...');
+
+    const steps = [
+      'Establishing handshake with secure database node...',
+      `Scanning student registers for: "${loginRegNo}"...`,
+      'Validating security passphrase token...',
+      'Unlocking secure encrypted user workspace session...'
+    ];
+
+    let currentStep = 0;
+    const interval = setInterval(() => {
+      if (currentStep < steps.length - 1) {
+        currentStep++;
+        setAuthLoadingMessage(steps[currentStep]);
+      }
+    }, 450);
+
     try {
       await signInWithEmailAndPassword(auth, match.email, loginPassword);
     } catch (err: any) {
@@ -619,12 +641,19 @@ export default function App() {
           // Proceed with login since password is valid in Firestore database!
         }
       } else {
+        clearInterval(interval);
+        setAuthLoadingState(null);
         setLoginWarningFields(['loginRegNo', 'loginPassword']);
         setLoginError("⚠️ Incorrect Credentials! The registration number or password entered is invalid.");
         showToast("❌ Invalid sign in details. Check both fields.");
         return;
       }
     }
+
+    // Hold the loading screen briefly for visual feedback
+    await new Promise(resolve => setTimeout(resolve, 1800));
+    clearInterval(interval);
+    setAuthLoadingState(null);
 
     setSessionUserReg(match.regNo);
     setLoginRegNo('');
@@ -712,6 +741,25 @@ export default function App() {
       chatAlias: regFirst
     };
 
+    setAuthLoadingState('register');
+    setAuthLoadingMessage('Initializing secure registration protocol...');
+
+    const steps = [
+      'Initializing secure registration protocol...',
+      `Generating student registry credentials for: "${regRegNo}"...`,
+      'Creating Firebase Authentication credentials...',
+      'Deploying secure user profile schemas into Firestore database...',
+      'Issuing simulated SMTP welcome package...'
+    ];
+
+    let currentStep = 0;
+    const interval = setInterval(() => {
+      if (currentStep < steps.length - 1) {
+        currentStep++;
+        setAuthLoadingMessage(steps[currentStep]);
+      }
+    }, 450);
+
     try {
       if (isGoogleRegistration) {
         // Already logged into Firebase Auth with Google. Just write to Firestore.
@@ -726,11 +774,18 @@ export default function App() {
         await setDoc(doc(db, "users", regRegNo.toLowerCase()), newUser);
       }
     } catch (err: any) {
+      clearInterval(interval);
+      setAuthLoadingState(null);
       console.error("Auth registration failed", err);
       setRegisterError(`⚠️ Registration Error: ${err.message}`);
       showToast("❌ Registration failed in authentication engine.");
       return;
     }
+    
+    // Guarantee loading visual plays through
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    clearInterval(interval);
+    setAuthLoadingState(null);
     
     // Send SMTP registration confirmation preview
     const subject = `🎉 Congratulations — your ${config.siteName} account is active!`;
@@ -1337,8 +1392,73 @@ export default function App() {
                 initial={{ opacity: 0, y: 25 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
-                className={`sm:max-w-md sm:w-full sm:mx-auto p-6 sm:p-8 ${getGlassmorphismClass(config.glassmorphism)} ${radius} shadow-2xl`}
+                className={`sm:max-w-md sm:w-full sm:mx-auto p-6 sm:p-8 ${getGlassmorphismClass(config.glassmorphism)} ${radius} shadow-2xl relative overflow-hidden`}
               >
+                {/* Search scanning database animation overlay */}
+                <AnimatePresence>
+                  {authLoadingState && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute inset-0 bg-white/95 dark:bg-slate-950/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 text-center select-none"
+                    >
+                      {/* Scanning Scope radar circle */}
+                      <div className="relative w-28 h-28 mb-6 flex items-center justify-center">
+                        {/* Outer rotating dash ring */}
+                        <motion.div 
+                          animate={{ rotate: 360 }}
+                          transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+                          className="absolute inset-0 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-full"
+                        />
+                        {/* Inner spinning ring */}
+                        <motion.div 
+                          animate={{ rotate: -360 }}
+                          transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
+                          className="absolute inset-2 border-2 border-dotted border-teal-500/50 rounded-full"
+                        />
+                        {/* Pulsing focal radar glow */}
+                        <motion.div 
+                          animate={{ scale: [1, 1.15, 1] }}
+                          transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                          className="absolute inset-4 bg-teal-500/10 dark:bg-teal-500/5 rounded-full flex items-center justify-center"
+                        />
+                        
+                        {/* Laser horizontal scanning line */}
+                        <motion.div 
+                          animate={{ y: [-32, 32, -32] }}
+                          transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
+                          className="absolute left-4 right-4 h-0.5 bg-teal-500 shadow-[0_0_8px_rgba(20,184,166,0.6)] z-10"
+                        />
+
+                        {/* Centered Icon */}
+                        <div className="relative z-20">
+                          {authLoadingState === 'signin' ? (
+                            <Database className="w-8 h-8 text-teal-600 dark:text-teal-400 animate-pulse" />
+                          ) : (
+                            <Loader2 className="w-8 h-8 text-teal-600 dark:text-teal-400 animate-spin" />
+                          )}
+                        </div>
+                      </div>
+
+                      <h3 className="text-sm font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest animate-pulse">
+                        {authLoadingState === 'signin' ? 'Authenticating Session' : 'Creating Student Node'}
+                      </h3>
+                      
+                      {/* Terminal log ticker with typing style */}
+                      <div className="mt-3 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg py-2 px-3 max-w-xs w-full">
+                        <p className="text-[10px] font-mono text-slate-600 dark:text-slate-400 leading-relaxed text-left min-h-[32px] flex items-start gap-1">
+                          <span className="text-teal-500 font-bold">&gt;</span>
+                          <span>
+                            {authLoadingMessage}
+                            <span className="inline-block w-1.5 h-3 ml-0.5 bg-teal-500 animate-[ping_1s_infinite]" />
+                          </span>
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <AnimatePresence mode="wait">
                   {authTab === 'login' ? (
                     /* LOGIN CARD */
@@ -1369,19 +1489,19 @@ export default function App() {
 
                       <div>
                         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wide">
-                          Registration Number
+                          Registration Number / Username
                         </label>
                         <input
                           type="text"
                           value={loginRegNo}
                           onChange={(e) => {
-                            handleFormatRegNo(e.target.value, setLoginRegNo);
+                            setLoginRegNo(e.target.value);
                             if (loginError) {
                               setLoginError(null);
                               setLoginWarningFields([]);
                             }
                           }}
-                          placeholder="YYYY-DD-NNNNN"
+                          placeholder="e.g. 2025-04-00000 or admin"
                           className={`w-full bg-slate-50 dark:bg-slate-950 border ${
                             loginWarningFields.includes('loginRegNo') 
                               ? 'border-red-500 ring-1 ring-red-500' 
@@ -2479,12 +2599,12 @@ export default function App() {
                 </p>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Registration Number</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Registration Number / Username</label>
                   <input
                     type="text"
                     value={forgotReg}
-                    onChange={(e) => handleFormatRegNo(e.target.value, setForgotReg)}
-                    placeholder="YYYY-DD-NNNNN"
+                    onChange={(e) => setForgotReg(e.target.value)}
+                    placeholder="e.g. 2025-04-00000 or admin"
                     className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2.5 text-xs font-mono focus:outline-none ${radius}`}
                   />
                 </div>
