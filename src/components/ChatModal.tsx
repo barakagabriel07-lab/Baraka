@@ -27,6 +27,12 @@ interface ChatModalProps {
   directChats: Record<string, ChatMessage[]>;
   onSendChatMessage: (text: string, options?: Partial<ChatMessage>) => void;
   showToast: (msg: string) => void;
+  onMarkAsRead?: (type: 'group' | 'direct', peerReg?: string) => void;
+  unreadCounts?: {
+    group: number;
+    direct: Record<string, number>;
+    total: number;
+  };
 }
 
 export const ChatModal: React.FC<ChatModalProps> = ({
@@ -38,7 +44,9 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   groupChat,
   directChats,
   onSendChatMessage,
-  showToast
+  showToast,
+  onMarkAsRead,
+  unreadCounts
 }) => {
   if (!isOpen || !currentUser) return null;
 
@@ -99,6 +107,17 @@ export const ChatModal: React.FC<ChatModalProps> = ({
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messagesToRender, chatType, selectedPeerReg]);
+
+  // Mark messages as read
+  useEffect(() => {
+    if (onMarkAsRead) {
+      if (chatType === 'group') {
+        onMarkAsRead('group');
+      } else if (chatType === 'direct' && selectedPeerReg) {
+        onMarkAsRead('direct', selectedPeerReg);
+      }
+    }
+  }, [chatType, selectedPeerReg, messagesToRender.length, onMarkAsRead]);
 
   // Voice recording timer
   useEffect(() => {
@@ -335,23 +354,33 @@ export const ChatModal: React.FC<ChatModalProps> = ({
           <div className="flex items-center gap-1">
             <button
               onClick={() => setChatType('group')}
-              className={`py-1.5 px-3.5 text-xs font-bold transition-all ${radius} ${
+              className={`py-1.5 px-3.5 text-xs font-bold transition-all ${radius} relative flex items-center gap-1.5 ${
                 chatType === 'group'
                   ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-50'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
               }`}
             >
               🌐 General Group Lobby
+              {unreadCounts && unreadCounts.group > 0 && (
+                <span className="px-1.5 py-0.5 text-[9px] font-bold text-white bg-red-500 rounded-full leading-none">
+                  {unreadCounts.group}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setChatType('direct')}
-              className={`py-1.5 px-3.5 text-xs font-bold transition-all ${radius} ${
+              className={`py-1.5 px-3.5 text-xs font-bold transition-all ${radius} relative flex items-center gap-1.5 ${
                 chatType === 'direct'
                   ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-50'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
               }`}
             >
               👤 Direct Message DMs
+              {unreadCounts && (Object.values(unreadCounts.direct) as number[]).reduce((a, b) => a + b, 0) > 0 && (
+                <span className="px-1.5 py-0.5 text-[9px] font-bold text-white bg-red-500 rounded-full leading-none">
+                  {(Object.values(unreadCounts.direct) as number[]).reduce((a, b) => a + b, 0)}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -369,9 +398,11 @@ export const ChatModal: React.FC<ChatModalProps> = ({
               <option value="">Select a user to message...</option>
               {peerUsers.map(u => {
                 const roleLabel = u.role === 'programmer' ? '[Dev]' : u.role === 'admin' ? '[Admin]' : '[Student]';
+                const unreadCount = unreadCounts?.direct[u.regNo] || 0;
+                const unreadSuffix = unreadCount > 0 ? ` 🔴 (${unreadCount} unread)` : '';
                 return (
                   <option key={u.regNo} value={u.regNo}>
-                    {roleLabel} {u.chatAlias || `${u.firstName} ${u.lastName}`} — ({u.regNo})
+                    {roleLabel} {u.chatAlias || `${u.firstName} ${u.lastName}`} — ({u.regNo}){unreadSuffix}
                   </option>
                 );
               })}

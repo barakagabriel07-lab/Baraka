@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, FormEvent } from 'react';
+import React, { useState, useEffect, useRef, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db } from './firebase';
 import { 
@@ -111,7 +111,6 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
 }
 
 export default function App() {
@@ -213,6 +212,62 @@ export default function App() {
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
   const [isMaterialsOpen, setIsMaterialsOpen] = useState(false);
+
+  // Unread chat tracking & browser notifications
+  const [lastReadGroup, setLastReadGroup] = useState<number>(() => {
+    return Number(localStorage.getItem('muhas_last_read_group') || Date.now());
+  });
+  const [lastReadDirects, setLastReadDirects] = useState<Record<string, number>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('muhas_last_read_directs') || '{}');
+    } catch {
+      return {};
+    }
+  });
+
+  const shownNotifsRef = useRef<Set<string>>(new Set());
+  const mountTimeRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    localStorage.setItem('muhas_last_read_group', lastReadGroup.toString());
+  }, [lastReadGroup]);
+
+  useEffect(() => {
+    localStorage.setItem('muhas_last_read_directs', JSON.stringify(lastReadDirects));
+  }, [lastReadDirects]);
+
+  // Handle requesting notification permissions on load
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  const triggerBrowserNotification = (title: string, body: string) => {
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') {
+        try {
+          new Notification(title, {
+            body,
+            icon: 'icon-192.png'
+          });
+        } catch (err) {
+          console.warn("Could not fire standard Notification:", err);
+        }
+      }
+    }
+  };
+
+  const handleMarkAsRead = (type: 'group' | 'direct', peerReg?: string) => {
+    if (type === 'group') {
+      setLastReadGroup(Date.now());
+    } else if (type === 'direct' && peerReg) {
+      setLastReadDirects(prev => ({
+        ...prev,
+        [peerReg]: Date.now()
+      }));
+    }
+  };
 
   // Email Preview Trigger State
   const [simulatedEmail, setSimulatedEmail] = useState<{
@@ -415,6 +470,80 @@ export default function App() {
       unsubAuth();
     };
   }, []);
+
+  // Compute unread message counts
+  const getUnreadCounts = () => {
+    if (!currentUser) return { group: 0, direct: {}, total: 0 };
+
+    let groupUnread = 0;
+    groupChat.forEach(msg => {
+      if (msg.regNo && msg.regNo !== currentUser.regNo) {
+        const t = (msg as any).timestamp || 0;
+        if (t > lastReadGroup) {
+          groupUnread++;
+        }
+      }
+    });
+
+    const directUnread: Record<string, number> = {};
+    let directTotal = 0;
+
+    Object.keys(directChats).forEach(key => {
+      const msgs = directChats[key] || [];
+      msgs.forEach(msg => {
+        if (msg.fromRegNo && msg.fromRegNo !== currentUser.regNo && msg.toRegNo === currentUser.regNo) {
+          const t = (msg as any).timestamp || 0;
+          const lastRead = lastReadDirects[msg.fromRegNo] || 0;
+          if (t > lastRead) {
+            directUnread[msg.fromRegNo] = (directUnread[msg.fromRegNo] || 0) + 1;
+            directTotal++;
+          }
+        }
+      });
+    });
+
+    return {
+      group: groupUnread,
+      direct: directUnread,
+      total: groupUnread + directTotal
+    };
+  };
+
+  const unreadCounts = getUnreadCounts();
+
+  // Watch for incoming new messages live and trigger notifications
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Monitor Group Chat
+    groupChat.forEach(msg => {
+      const t = (msg as any).timestamp || 0;
+      // If it arrived after mount, is not sent by current user, and hasn't notified yet
+      if (t > mountTimeRef.current && msg.regNo && msg.regNo !== currentUser.regNo) {
+        if (!shownNotifsRef.current.has(msg.id)) {
+          shownNotifsRef.current.add(msg.id);
+          showToast(`💬 Group: ${msg.name}: "${msg.text || 'Shared an attachment'}"`);
+          triggerBrowserNotification(`Group Chat - ${msg.name}`, msg.text || 'Shared an attachment');
+        }
+      }
+    });
+
+    // Monitor Direct Chats
+    Object.keys(directChats).forEach(key => {
+      const msgs = directChats[key] || [];
+      msgs.forEach(msg => {
+        const t = (msg as any).timestamp || 0;
+        // If it arrived after mount, is for the current user, is not sent by current user, and hasn't notified yet
+        if (t > mountTimeRef.current && msg.fromRegNo && msg.fromRegNo !== currentUser.regNo && msg.toRegNo === currentUser.regNo) {
+          if (!shownNotifsRef.current.has(msg.id)) {
+            shownNotifsRef.current.add(msg.id);
+            showToast(`💬 DM from ${msg.name}: "${msg.text || 'Shared an attachment'}"`);
+            triggerBrowserNotification(`Message from ${msg.name}`, msg.text || 'Shared an attachment');
+          }
+        }
+      });
+    });
+  }, [groupChat, directChats, currentUser]);
 
   // Persistances trigger
   useEffect(() => {
@@ -2086,6 +2215,11 @@ export default function App() {
                   className={`fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-gradient-to-tr ${accentGradient} text-white flex items-center justify-center shadow-2xl shrink-0`}
                 >
                   <MessageSquare className="w-6 h-6" />
+                  {unreadCounts && unreadCounts.total > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white border-2 border-slate-50 dark:border-slate-900 animate-pulse shadow-md">
+                      {unreadCounts.total}
+                    </span>
+                  )}
                 </motion.button>
               )}
             </motion.div>
@@ -2156,6 +2290,8 @@ export default function App() {
             directChats={directChats}
             onSendChatMessage={handleSendChatMessage}
             showToast={showToast}
+            onMarkAsRead={handleMarkAsRead}
+            unreadCounts={unreadCounts}
           />
         )}
       </AnimatePresence>

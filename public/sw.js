@@ -1,14 +1,14 @@
 const CACHE_NAME = 'muhas-pulse-v1';
 const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
-  '/icon-192.jpg',
-  '/icon-512.jpg',
-  '/screenshot-desktop.jpg',
-  '/screenshot-mobile.jpg'
+  './',
+  'index.html',
+  'manifest.json',
+  'icon-192.png',
+  'icon-512.png',
+  'icon-192.jpg',
+  'icon-512.jpg',
+  'screenshot-desktop.jpg',
+  'screenshot-mobile.jpg'
 ];
 
 // Install Service Worker
