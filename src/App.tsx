@@ -260,6 +260,7 @@ export default function App() {
 
   // Category filter for materials view
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('');
+  const [materialSearchText, setMaterialSearchText] = useState('');
 
   // Resolve current active logged-in User
   const currentUser = sessionUserReg 
@@ -495,6 +496,13 @@ export default function App() {
       localStorage.removeItem('muhas_pulse_session');
     }
   }, [sessionUserReg]);
+
+  // Auto open settings modal if default admin logs in
+  useEffect(() => {
+    if (currentUser?.role === 'admin' && (currentUser.regNo.toLowerCase() === 'admin' || currentUser.password === '123')) {
+      setIsSettingsOpen(true);
+    }
+  }, [currentUser]);
 
   // Set initial theme
   useEffect(() => {
@@ -1313,54 +1321,7 @@ export default function App() {
                   </p>
                 </div>
 
-                {/* Heart Pulse ECG Line Animation */}
-                <div className="flex flex-col items-center justify-center py-1 mt-1">
-                  <div className="flex items-center gap-1.5 text-rose-500 dark:text-rose-400">
-                    <motion.span
-                      animate={{
-                        scale: [1, 1.25, 1, 1.2, 1],
-                      }}
-                      transition={{
-                        duration: 1.5,
-                        repeat: Infinity,
-                        ease: "easeInOut"
-                      }}
-                      className="text-lg"
-                    >
-                      ❤️
-                    </motion.span>
-                    <span className="text-[10px] font-extrabold tracking-widest font-mono uppercase text-slate-400 dark:text-slate-500">
-                      PULSE MONITOR ACTIVE
-                    </span>
-                  </div>
-                  <svg width="180" height="30" viewBox="0 0 180 30" fill="none" className="text-rose-500 dark:text-rose-400 mt-1">
-                    <path
-                      d="M0 15 H60 L65 7 L70 23 L75 2 L80 28 L85 15 H180"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="opacity-25"
-                    />
-                    <motion.path
-                      d="M0 15 H60 L65 7 L70 23 L75 2 L80 28 L85 15 H180"
-                      stroke="currentColor"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      initial={{ pathLength: 0 }}
-                      animate={{
-                        pathLength: [0, 1, 1],
-                        pathOffset: [0, 0, 1],
-                      }}
-                      transition={{
-                        duration: 2.0,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                      }}
-                    />
-                  </svg>
-                </div>
+
               </motion.div>
 
               {/* Toggles */}
@@ -1397,7 +1358,7 @@ export default function App() {
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    Register Node
+                    Registration
                   </button>
                 </div>
               </motion.div>
@@ -1408,65 +1369,30 @@ export default function App() {
                 transition={{ duration: 0.6, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
                 className={`sm:max-w-md sm:w-full sm:mx-auto p-6 sm:p-8 ${getGlassmorphismClass(config.glassmorphism)} ${radius} shadow-2xl relative overflow-hidden`}
               >
-                {/* Search scanning database animation overlay */}
+                {/* Modern clean loading animation overlay */}
                 <AnimatePresence>
                   {authLoadingState && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="absolute inset-0 bg-white/95 dark:bg-slate-950/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 text-center select-none"
+                      className="absolute inset-0 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center select-none"
                     >
-                      {/* Scanning Scope radar circle */}
-                      <div className="relative w-28 h-28 mb-6 flex items-center justify-center">
-                        {/* Outer rotating dash ring */}
-                        <motion.div 
-                          animate={{ rotate: 360 }}
-                          transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
-                          className="absolute inset-0 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-full"
-                        />
-                        {/* Inner spinning ring */}
-                        <motion.div 
-                          animate={{ rotate: -360 }}
-                          transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
-                          className="absolute inset-2 border-2 border-dotted border-teal-500/50 rounded-full"
-                        />
-                        {/* Pulsing focal radar glow */}
-                        <motion.div 
-                          animate={{ scale: [1, 1.15, 1] }}
-                          transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
-                          className="absolute inset-4 bg-teal-500/10 dark:bg-teal-500/5 rounded-full flex items-center justify-center"
-                        />
-                        
-                        {/* Laser horizontal scanning line */}
-                        <motion.div 
-                          animate={{ y: [-32, 32, -32] }}
-                          transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
-                          className="absolute left-4 right-4 h-0.5 bg-teal-500 shadow-[0_0_8px_rgba(20,184,166,0.6)] z-10"
-                        />
-
-                        {/* Centered Icon */}
-                        <div className="relative z-20">
-                          {authLoadingState === 'signin' ? (
-                            <Database className="w-8 h-8 text-teal-600 dark:text-teal-400 animate-pulse" />
-                          ) : (
-                            <Loader2 className="w-8 h-8 text-teal-600 dark:text-teal-400 animate-spin" />
-                          )}
+                      <div className="relative flex flex-col items-center">
+                        {/* Elegant modern spinner */}
+                        <div className="relative w-16 h-16 mb-4">
+                          <div className="absolute inset-0 rounded-full border-4 border-slate-200 dark:border-slate-800/80" />
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                            className={`absolute inset-0 rounded-full border-4 border-t-transparent ${config.colorAccent === 'teal' ? 'border-teal-500' : config.colorAccent === 'coral' ? 'border-red-500' : config.colorAccent === 'amber' ? 'border-amber-500' : config.colorAccent === 'violet' ? 'border-purple-500' : 'border-blue-500'}`}
+                          />
                         </div>
-                      </div>
-
-                      <h3 className="text-sm font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest animate-pulse">
-                        {authLoadingState === 'signin' ? 'Authenticating Session' : 'Creating Student Node'}
-                      </h3>
-                      
-                      {/* Terminal log ticker with typing style */}
-                      <div className="mt-3 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg py-2 px-3 max-w-xs w-full">
-                        <p className="text-[10px] font-mono text-slate-600 dark:text-slate-400 leading-relaxed text-left min-h-[32px] flex items-start gap-1">
-                          <span className="text-teal-500 font-bold">&gt;</span>
-                          <span>
-                            {authLoadingMessage}
-                            <span className="inline-block w-1.5 h-3 ml-0.5 bg-teal-500 animate-[ping_1s_infinite]" />
-                          </span>
+                        <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-200 tracking-wide animate-pulse">
+                          {authLoadingState === 'signin' ? 'Signing in...' : authLoadingState === 'register' ? 'Creating your account...' : 'Logging out...'}
+                        </h3>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5 font-medium font-sans">
+                          {authLoadingMessage || 'Please wait a moment'}
                         </p>
                       </div>
                     </motion.div>
@@ -1560,7 +1486,7 @@ export default function App() {
                         type="submit"
                         className={`w-full py-3 text-xs font-bold text-white bg-gradient-to-r ${accentGradient} ${radius} hover:shadow-lg transition-all active:scale-98`}
                       >
-                        Authorize & Log In
+                        Log In
                       </button>
 
                       <div className="flex items-center my-4">
@@ -2136,7 +2062,7 @@ export default function App() {
 
                 {/* Inline workspace footer */}
                 <footer className="py-4 border-t border-slate-200/40 dark:border-slate-800/20 text-center text-[10px] text-slate-400 dark:text-slate-500 font-mono tracking-wide">
-                  © 2026 {config.siteName}. All rights reserved.
+                  © 2026 Baraka. All rights reserved.
                 </footer>
               </div>
 
@@ -2169,7 +2095,7 @@ export default function App() {
         {/* Footer */}
         {!currentUser && (
           <footer className="py-4 border-t border-slate-200/40 dark:border-slate-800/20 text-center text-[10px] text-slate-400 dark:text-slate-500 font-mono tracking-wide mt-auto">
-            © 2026 {config.siteName}. All rights reserved.
+            © 2026 Baraka. All rights reserved.
           </footer>
         )}
       </div>
@@ -2525,29 +2451,46 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Filter */}
-              <div className="mb-3.5 flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-400">Class category:</span>
-                <select
-                  value={selectedCategoryFilter}
-                  onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-                  className={`flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 p-1.5 text-xs ${radius}`}
-                >
-                  <option value="">All Materials & Courses</option>
-                  {DOCUMENT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+              {/* Search Bar */}
+              <div className="mb-4 relative">
+                <input
+                  type="text"
+                  value={materialSearchText}
+                  onChange={(e) => setMaterialSearchText(e.target.value)}
+                  placeholder="Search materials by title or category..."
+                  className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2.5 pl-9 text-xs focus:outline-none ${radius}`}
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                {materialSearchText && (
+                  <button
+                    onClick={() => setMaterialSearchText('')}
+                    className="absolute right-3 top-2.5 text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-3.5">
                 {documents
-                  .filter(d => !selectedCategoryFilter || d.category === selectedCategoryFilter)
+                  .filter(d => {
+                    const matchText = materialSearchText.toLowerCase();
+                    return !materialSearchText || 
+                           d.title.toLowerCase().includes(matchText) || 
+                           d.category.toLowerCase().includes(matchText);
+                  })
                   .length === 0 ? (
                   <div className="text-center py-10 text-slate-400 text-xs">
-                    No academic materials found in this category slot.
+                    No academic materials found matching your search.
                   </div>
                 ) : (
                   documents
-                    .filter(d => !selectedCategoryFilter || d.category === selectedCategoryFilter)
+                    .filter(d => {
+                      const matchText = materialSearchText.toLowerCase();
+                      return !materialSearchText || 
+                             d.title.toLowerCase().includes(matchText) || 
+                             d.category.toLowerCase().includes(matchText);
+                    })
                     .slice()
                     .reverse()
                     .map((doc) => (

@@ -247,6 +247,70 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     showToast(`Successfully renamed student database entry!`);
   };
 
+  const isDefaultAdmin = currentUser.role === 'admin' && (currentUser.regNo.toLowerCase() === 'admin' || currentUser.password === '123');
+
+  const handlePersonalizeAdminSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!firstName.trim() || !lastName.trim() || !email.trim() || !phone.trim() || !newPwd || !newPwd2) {
+      showToast("⚠️ All fields are required for account activation.");
+      return;
+    }
+    if (!/^\d{1,9}$/.test(phone)) {
+      showToast("⚠️ Phone number must be numeric (up to 9 digits).");
+      return;
+    }
+    if (newPwd !== newPwd2) {
+      showToast("⚠️ New passwords do not match.");
+      return;
+    }
+    if (newPwd.length < 4) {
+      showToast("⚠️ Password must be at least 4 characters.");
+      return;
+    }
+
+    let finalRegNo = currentUser.regNo;
+    if (adminType === 'cr') {
+      const cleanedReg = adminRegNo.trim();
+      if (!cleanedReg) {
+        showToast("⚠️ Registration number is required for Class Representatives.");
+        return;
+      }
+      if (!/^\d{4}-\d{2}-\d{5}$/.test(cleanedReg)) {
+        showToast("⚠️ Invalid format! Registration number must follow: YYYY-DD-NNNNN");
+        return;
+      }
+      finalRegNo = cleanedReg;
+    } else {
+      finalRegNo = `lecturer-${firstName.trim().toLowerCase()}-${lastName.trim().toLowerCase()}`;
+    }
+
+    // Check collision
+    if (finalRegNo.toLowerCase() !== currentUser.regNo.toLowerCase()) {
+      const collision = allUsers.some(u => u.regNo && u.regNo.toLowerCase() === finalRegNo.toLowerCase());
+      if (collision) {
+        showToast(`⚠️ Identifier "${finalRegNo}" is already in use by another user.`);
+        return;
+      }
+    }
+
+    onUpdateUser({
+      firstName: firstName.trim(),
+      middleName: middleName.trim(),
+      lastName: lastName.trim(),
+      gender: gender || 'Prefer not to say',
+      course: adminType === 'cr' ? course : 'Administration',
+      regNo: finalRegNo,
+      email: email.trim(),
+      phone: phone.trim(),
+      countryCode,
+      password: newPwd,
+      adminRole: adminType === 'cr' ? 'Class Representative' : 'Lecturer',
+      chatAlias: chatAlias.trim() || `${firstName.trim()} (Admin)`
+    });
+
+    showToast("🎉 Administrator account activated & personalized successfully!");
+  };
+
   return (
     <div className="fixed inset-0 z-100 flex items-end justify-center sm:items-center p-0 sm:p-4">
       {/* Backdrop */}
@@ -254,7 +318,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        onClick={onClose}
+        onClick={() => {
+          if (!isDefaultAdmin) {
+            onClose();
+          } else {
+            showToast("⚠️ As a default administrator, you must personalize your account before continuing.");
+          }
+        }}
         className="absolute inset-0 bg-slate-950/70 backdrop-blur-[2px]"
       />
 
@@ -277,72 +347,265 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-extrabold text-slate-900 dark:text-slate-50 font-sans tracking-tight">
-                System Preferences
+                {isDefaultAdmin ? "🛡️ Admin Account Personalization" : "System Preferences"}
               </h2>
               <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                Personalize your experience & admin panel parameters
+                {isDefaultAdmin 
+                  ? "All administrators must personalize their name, identifier, and password before closing this session."
+                  : "Personalize your experience & admin panel parameters"
+                }
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Tab Buttons */}
-        <div className="px-6 py-2.5 bg-slate-50/50 dark:bg-slate-950/20 border-b border-slate-100 dark:border-slate-800/60 flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-shrink-0">
-          <button
-            onClick={() => setActiveTab('profile')}
-            className={`py-1.5 px-3.5 text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${radius} ${
-              activeTab === 'profile'
-                ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-50'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
-            }`}
-          >
-            <User className="w-3.5 h-3.5" />
-            My Identity
-          </button>
-
-          <button
-            onClick={() => setActiveTab('security')}
-            className={`py-1.5 px-3.5 text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${radius} ${
-              activeTab === 'security'
-                ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-50'
-                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
-            }`}
-          >
-            <Lock className="w-3.5 h-3.5" />
-            Security & Auth
-          </button>
-
-          {isProg && (
+          {!isDefaultAdmin && (
             <button
-              onClick={() => setActiveTab('programmer')}
-              className={`py-1.5 px-3.5 text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${radius} ${
-                activeTab === 'programmer'
-                  ? 'bg-purple-500 dark:bg-purple-600 shadow-sm text-white'
-                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
-              }`}
+              onClick={onClose}
+              className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
-              <Terminal className="w-3.5 h-3.5" />
-              ⚡ System Architect Panel
+              <X className="w-5 h-5" />
             </button>
           )}
         </div>
 
-        {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <AnimatePresence mode="wait">
-            {activeTab === 'profile' && (
-              <motion.form
-                key="profile"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                onSubmit={handleSaveProfile}
+        {isDefaultAdmin ? (
+          /* ========================================================
+             WIZARD FOR INITIAL DEFAULT ADMINS (admin/123)
+             ======================================================== */
+          <form onSubmit={handlePersonalizeAdminSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 p-3 rounded-xl">
+              <p className="text-[11px] text-amber-700 dark:text-amber-400 font-medium leading-relaxed">
+                🚨 <strong>Security Precaution:</strong> You are currently authenticated using default credentials (Admin / 123). You must enter your active identity information and configure a personal password to lock down the platform.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {/* Role Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase">
+                  Select Admin Role / Department Title *
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAdminType('cr')}
+                    className={`p-3 text-xs font-bold border text-center transition-all ${radius} ${
+                      adminType === 'cr'
+                        ? 'border-slate-800 bg-slate-900 text-white'
+                        : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    🎓 Class Representative (CR)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdminType('lecturer')}
+                    className={`p-3 text-xs font-bold border text-center transition-all ${radius} ${
+                      adminType === 'lecturer'
+                        ? 'border-slate-800 bg-slate-900 text-white'
+                        : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    👨‍🏫 Lecturer / Head of Dept
+                  </button>
+                </div>
+              </div>
+
+              {/* Names */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 uppercase">First Name *</label>
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    required
+                    className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius}`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 uppercase">Last Name *</label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    required
+                    className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius}`}
+                  />
+                </div>
+              </div>
+
+              {/* Conditional CR Fields */}
+              {adminType === 'cr' && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 uppercase">Registration Number (Reg No.) *</label>
+                    <input
+                      type="text"
+                      value={adminRegNo}
+                      onChange={(e) => {
+                        let val = e.target.value.replace(/[^\d-]/g, '');
+                        if (val.length === 4 && !val.includes('-')) {
+                          val += '-';
+                        } else if (val.length === 7 && val.split('-').length === 2 && val.charAt(6) !== '-') {
+                          val = val.substring(0, 6) + '-' + val.substring(6);
+                        }
+                        setAdminRegNo(val.substring(0, 13));
+                      }}
+                      placeholder="YYYY-DD-NNNNN"
+                      required
+                      className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs font-mono ${radius}`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 uppercase">Managed Course / Programme *</label>
+                    <select
+                      value={course}
+                      onChange={(e) => setCourse(e.target.value)}
+                      required
+                      className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius}`}
+                    >
+                      <option value="">Select Programme...</option>
+                      {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Contact Information */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 uppercase">Registered Email *</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    placeholder="name@muhas.ac.tz"
+                    className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius}`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 uppercase">WhatsApp Phone *</label>
+                  <div className="flex gap-1">
+                    <select
+                      value={countryCode}
+                      onChange={(e) => setCountryCode(e.target.value)}
+                      className={`bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius}`}
+                    >
+                      {COUNTRIES.map(([c, code]) => <option key={code} value={code}>{code} ({c.substring(0,3)})</option>)}
+                    </select>
+                    <input
+                      type="text"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').substring(0, 9))}
+                      placeholder="712345678"
+                      required
+                      className={`flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius}`}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Password Setup */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-100 dark:border-slate-800 pt-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 uppercase">Configure New Password *</label>
+                  <div className="relative">
+                    <input
+                      type={showNewPwd ? "text" : "password"}
+                      value={newPwd}
+                      onChange={(e) => setNewPwd(e.target.value)}
+                      required
+                      placeholder="At least 4 characters"
+                      className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius} pr-9`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPwd(!showNewPwd)}
+                      className="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    >
+                      {showNewPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 uppercase">Confirm New Password *</label>
+                  <input
+                    type="password"
+                    value={newPwd2}
+                    onChange={(e) => setNewPwd2(e.target.value)}
+                    required
+                    placeholder="Re-type password"
+                    className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius}`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className={`w-full py-3 mt-4 text-xs font-extrabold text-white bg-slate-900 hover:bg-black dark:bg-slate-100 dark:text-slate-900 shadow-md flex items-center justify-center gap-1.5 transition-all ${radius}`}
+            >
+              <CheckCircle2 className="w-4 h-4" /> Save & Activate Admin Account
+            </button>
+          </form>
+        ) : (
+          <>
+            {/* Tab Buttons */}
+            <div className="px-6 py-2.5 bg-slate-50/50 dark:bg-slate-950/20 border-b border-slate-100 dark:border-slate-800/60 flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-shrink-0">
+              <button
+                onClick={() => setActiveTab('profile')}
+                className={`py-1.5 px-3.5 text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${radius} ${
+                  activeTab === 'profile'
+                    ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-50'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                }`}
+              >
+                <User className="w-3.5 h-3.5" />
+                My Identity
+              </button>
+
+              <button
+                onClick={() => setActiveTab('security')}
+                className={`py-1.5 px-3.5 text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${radius} ${
+                  activeTab === 'security'
+                    ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-50'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Security & Auth
+              </button>
+
+              {isProg && (
+                <button
+                  onClick={() => setActiveTab('programmer')}
+                  className={`py-1.5 px-3.5 text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${radius} ${
+                    activeTab === 'programmer'
+                      ? 'bg-purple-500 dark:bg-purple-600 shadow-sm text-white'
+                      : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                  }`}
+                >
+                  <Terminal className="w-3.5 h-3.5" />
+                  ⚡ System Architect Panel
+                </button>
+              )}
+            </div>
+
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <AnimatePresence mode="wait">
+                {activeTab === 'profile' && (
+                  <motion.form
+                    key="profile"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    onSubmit={handleSaveProfile}
                 className="space-y-6"
               >
                 {/* Profile Pic Card */}
@@ -978,6 +1241,48 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           </button>
                         </div>
                       </div>
+
+                      {/* Sick Report Template Upload */}
+                      <div className="sm:col-span-2 border-t border-slate-200/50 dark:border-slate-800/50 pt-4">
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Upload Sick Report Template (PDF/Image)
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <div className={`p-2.5 bg-rose-50 dark:bg-rose-950/20 text-rose-500 rounded-lg flex items-center gap-1.5 text-xs font-bold border border-rose-100 dark:border-rose-900/30`}>
+                            <span>🏥</span>
+                            <span className="truncate max-w-[200px]">
+                              {config.sickReportTemplateName || "No template uploaded"}
+                            </span>
+                          </div>
+                          <input
+                            type="file"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = async (event) => {
+                                const dataUrl = event.target?.result as string;
+                                onUpdateConfig({
+                                  sickReportTemplateName: file.name,
+                                  sickReportTemplateUrl: dataUrl
+                                });
+                                showToast(`✅ Successfully uploaded Sick Report Template: ${file.name}`);
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                            accept=".pdf,image/*"
+                            id="sickTemplateUploadBtn"
+                            className="hidden"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => document.getElementById('sickTemplateUploadBtn')?.click()}
+                            className={`px-3 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 ${radius} hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors`}
+                          >
+                            Upload Template File
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1060,6 +1365,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
           </AnimatePresence>
         </div>
+      </>
+    )}
       </motion.div>
     </div>
   );

@@ -151,7 +151,13 @@ export const DEFAULT_CONFIG: SystemConfig = {
   customGreeting: "Welcome to MUHAS PULSE",
   allowMultipleProgrammers: true,
   siteName: "MUHAS PULSE",
-  siteLogo: "/icon-512.png"
+  siteLogo: "/icon-512.png",
+  sickReportTemplateName: null,
+  sickReportTemplateUrl: null,
+  programmerGithub: "https://github.com",
+  programmerLinkedin: "https://linkedin.com",
+  programmerTwitter: "https://twitter.com",
+  programmerWebsite: "https://muhaspulse.app"
 };
 
 export const INITIAL_NEWS = [

@@ -108,4 +108,10 @@ export interface SystemConfig {
   allowMultipleProgrammers: boolean;
   siteName: string;
   siteLogo: string | null;
+  sickReportTemplateName?: string | null;
+  sickReportTemplateUrl?: string | null;
+  programmerGithub?: string | null;
+  programmerLinkedin?: string | null;
+  programmerTwitter?: string | null;
+  programmerWebsite?: string | null;
 }

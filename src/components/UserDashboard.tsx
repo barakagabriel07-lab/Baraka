@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Heart, BookOpen, Users, HelpCircle, ArrowRight, ClipboardList, 
-  Send, Paperclip, MessageSquare, Check, Shield, Mail, PhoneCall 
+  Send, Paperclip, MessageSquare, Check, Shield, Mail, PhoneCall, Download 
 } from 'lucide-react';
 import { User as UserType, SystemConfig, Report } from '../types';
 import { 
@@ -342,6 +342,31 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <p className="text-xs text-rose-600 dark:text-rose-300 font-medium leading-relaxed">
                   {formError}
                 </p>
+              </motion.div>
+            )}
+
+            {activeTab === 'health' && config.sickReportTemplateUrl && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 bg-emerald-50 dark:bg-emerald-950/25 border border-emerald-200/60 dark:border-emerald-800/60 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm"
+              >
+                <div>
+                  <div className="text-xs font-extrabold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                    <span>🏥</span>
+                    <span>Official Sick Report Template Available</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-medium leading-relaxed">
+                    Download this official template, fill out your medical details, and attach the completed document below.
+                  </p>
+                </div>
+                <a
+                  href={config.sickReportTemplateUrl}
+                  download={config.sickReportTemplateName || "sick_report_template.pdf"}
+                  className={`px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition-all hover:shadow-sm flex items-center gap-1.5 shrink-0 ${radius}`}
+                >
+                  <Download className="w-3.5 h-3.5" /> Download Template
+                </a>
               </motion.div>
             )}
 
