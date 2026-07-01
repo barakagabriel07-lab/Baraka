@@ -1,14 +1,14 @@
 const CACHE_NAME = 'muhas-pulse-v1';
 const ASSETS_TO_CACHE = [
-  './',
-  'index.html',
-  'manifest.json',
-  'icon-192.png',
-  'icon-512.png',
-  'icon-192.jpg',
-  'icon-512.jpg',
-  'screenshot-desktop.jpg',
-  'screenshot-mobile.jpg'
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/icon-192.jpg',
+  '/icon-512.jpg',
+  '/screenshot-desktop.jpg',
+  '/screenshot-mobile.jpg'
 ];
 
 // Install Service Worker
@@ -16,7 +16,9 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('[Service Worker] Pre-caching offline assets');
-      return cache.addAll(ASSETS_TO_CACHE);
+      return cache.addAll(ASSETS_TO_CACHE).catch((err) => {
+        console.warn('[Service Worker] Pre-caching warning (some files may be missing or offline):', err);
+      });
     }).then(() => self.skipWaiting())
   );
 });
