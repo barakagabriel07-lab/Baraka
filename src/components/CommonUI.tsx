@@ -87,6 +87,41 @@ export const getGlassmorphismClass = (glass: SystemConfig['glassmorphism']) => {
   }
 };
 
+export const ECGAnimation: React.FC<{ size?: 'sm' | 'md'; idPrefix?: string }> = ({ size = 'md', idPrefix = 'default' }) => {
+  const isSm = size === 'sm';
+  const clipId = `ecg-clip-${idPrefix}`;
+  return (
+    <div className={`flex items-center justify-center gap-2 select-none ${isSm ? 'mt-0.5' : 'mt-3.5'}`}>
+      <div className={`relative overflow-hidden flex items-center ${isSm ? 'w-24 h-4' : 'w-48 h-6'}`}>
+        <svg className="w-full h-full stroke-red-500 dark:stroke-red-400 stroke-2 fill-none" viewBox="0 0 200 40">
+          <defs>
+            <clipPath id={clipId}>
+              <motion.rect
+                x="0"
+                y="0"
+                height="40"
+                animate={{ width: [0, 200] }}
+                transition={{ repeat: Infinity, duration: 2.5, ease: "linear" }}
+              />
+            </clipPath>
+          </defs>
+          <line x1="0" y1="20" x2="200" y2="20" className="stroke-slate-200/50 dark:stroke-slate-800/40 stroke-[0.5]" strokeDasharray="2,2" />
+          <path
+            d="M 0 20 L 40 20 L 48 20 L 52 10 L 56 30 L 60 20 L 64 20 L 68 0 L 72 40 L 76 20 L 84 20 L 88 23 L 92 17 L 96 20 L 140 20 L 148 20 L 152 10 L 156 30 L 160 20 L 164 20 L 168 0 L 172 40 L 176 20 L 184 20 L 188 23 L 192 17 L 196 20 L 200 20"
+            clipPath={`url(#${clipId})`}
+          />
+        </svg>
+        <motion.div 
+          animate={{ x: [0, isSm ? 96 : 192] }}
+          transition={{ repeat: Infinity, duration: 2.5, ease: "linear" }}
+          className="absolute w-1.5 h-1.5 bg-red-500 dark:bg-red-400 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.8)]"
+          style={{ left: 0 }}
+        />
+      </div>
+    </div>
+  );
+};
+
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   isOpen,
   onClose,
@@ -143,6 +178,13 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           {children && (
             <div className="w-full mt-4 text-left max-h-[220px] overflow-y-auto pr-1">
               {children}
+            </div>
+          )}
+
+          {/* Render the ECG Animation specifically for Logout or danger style confirmations */}
+          {type === 'danger' && (
+            <div className="w-full mt-4 border-t border-slate-100 dark:border-slate-800/80 pt-3">
+              <ECGAnimation idPrefix="logout-dialog" />
             </div>
           )}
 

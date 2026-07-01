@@ -30,7 +30,7 @@ import {
 import { 
   Bell, HelpCircle, Shield, Globe, Terminal, Volume2, 
   Settings, LogOut, Lock, Mail, CheckCircle2, MessageSquare, 
-  Activity, BookOpen, Download, Eye, EyeOff, X, Search, Database, RefreshCw, Loader2
+  Activity, BookOpen, Download, Eye, EyeOff, X, Search, Database, RefreshCw, Loader2, Share2
 } from 'lucide-react';
 
 import { 
@@ -59,7 +59,8 @@ import {
   getGlassmorphismClass, 
   ConfirmDialog, 
   EmailPreviewModal, 
-  SoundEffects 
+  SoundEffects,
+  ECGAnimation
 } from './components/CommonUI';
 
 import { UserDashboard } from './components/UserDashboard';
@@ -112,6 +113,8 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
 }
+
+const LOCAL_APP_VERSION = "1.1.0";
 
 export default function App() {
   // Global States persisted to LocalStorage
@@ -669,6 +672,29 @@ export default function App() {
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 2800);
+  };
+
+  const handleShareApp = async () => {
+    const shareData = {
+      title: 'MUHAS PULSE',
+      text: 'Check out MUHAS PULSE - Medical & Allied Student Portal. Highly interactive student dashboard with instant chat, reports, and news updates.',
+      url: window.location.origin
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        showToast("📢 Sharing overlay opened successfully!");
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          navigator.clipboard.writeText(shareData.url);
+          showToast("🔗 Link copied to clipboard! Share it with your classmates.");
+        }
+      }
+    } else {
+      navigator.clipboard.writeText(shareData.url);
+      showToast("🔗 Link copied to clipboard! Share it with your classmates.");
+    }
   };
 
   const playSynthesizedChime = () => {
@@ -1371,6 +1397,65 @@ export default function App() {
 
   return (
     <div className={`${currentUser ? 'h-screen overflow-hidden' : 'min-h-screen overflow-x-hidden'} relative flex flex-col ${fontSizeClass} bg-[#F8F7F4] dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200`}>
+      {/* Real-time Update Alert Banner */}
+      {config.appVersion && config.appVersion !== LOCAL_APP_VERSION && (
+        <motion.div
+          initial={{ y: -50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="fixed top-4 left-4 right-4 z-[300] max-w-lg mx-auto bg-slate-900/95 dark:bg-slate-900/98 backdrop-blur-md border border-red-500/30 text-white rounded-2xl shadow-2xl p-5 flex flex-col gap-3 ring-4 ring-red-500/10 overflow-hidden"
+        >
+          {/* Accent decoration */}
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 to-rose-600 animate-pulse" />
+          
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-red-500/15 flex items-center justify-center text-red-400 shrink-0 border border-red-500/20">
+              ⚡
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
+                  New System Update Ready!
+                </h4>
+                <span className="text-[10px] font-extrabold bg-red-500 text-white px-2 py-0.5 rounded-full uppercase animate-bounce">
+                  v{config.appVersion}
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 font-medium">
+                {config.lastUpdateDetails || "The system programmer has deployed a new update. Reload to apply all changes instantly."}
+              </p>
+            </div>
+          </div>
+
+          {/* ECG animated divider in the update prompt */}
+          <div className="py-1">
+            <ECGAnimation idPrefix="app-update-overlay" size="sm" />
+          </div>
+
+          <div className="flex items-center gap-2.5 justify-end mt-1">
+            <button
+              onClick={() => {
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then((registrations) => {
+                    for (const registration of registrations) {
+                      registration.update();
+                    }
+                  });
+                }
+                caches.keys().then((names) => {
+                  for (const name of names) {
+                    caches.delete(name);
+                  }
+                });
+                window.location.reload();
+              }}
+              className="px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-1.5"
+            >
+              🚀 Apply Update & Reload
+            </button>
+          </div>
+        </motion.div>
+      )}
+
       {/* Interactive Drift Background grids */}
       {config.particleBg && (
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
@@ -1448,6 +1533,7 @@ export default function App() {
                   <p className="text-xs text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-widest mt-1">
                     Medical & Allied Students Portal
                   </p>
+                  <ECGAnimation idPrefix="auth" />
                 </div>
 
 
@@ -1658,6 +1744,10 @@ export default function App() {
                         >
                           Forgot Password? Request bypass
                         </button>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                        <ECGAnimation idPrefix="login-bottom" size="sm" />
                       </div>
                     </motion.form>
                   ) : (
@@ -1961,6 +2051,10 @@ export default function App() {
                       >
                         Create Student Account
                       </button>
+
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                        <ECGAnimation idPrefix="register-bottom" size="sm" />
+                      </div>
                     </motion.form>
                   )}
                 </AnimatePresence>
@@ -2002,6 +2096,8 @@ export default function App() {
                         <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase font-mono tracking-wider animate-pulse flex items-center gap-1">
                           Network Central · <span className="text-emerald-500 dark:text-emerald-400 font-extrabold animate-pulse">LIVE</span>
                         </span>
+                        <span className="border-l border-slate-200 dark:border-slate-800/80 h-2.5 mx-1 shrink-0" />
+                        <ECGAnimation size="sm" idPrefix="topbar" />
                       </div>
                     </div>
                   </div>
@@ -2030,6 +2126,15 @@ export default function App() {
                         )}
                       </button>
                     )}
+
+                    {/* Share Portal Button */}
+                    <button
+                      onClick={handleShareApp}
+                      className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full relative"
+                      title="Share Portal App"
+                    >
+                      <Share2 className="w-5 h-5" />
+                    </button>
 
                     {/* Profile Dropdown */}
                     <div className="relative">

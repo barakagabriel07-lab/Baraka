@@ -114,4 +114,10 @@ export interface SystemConfig {
   programmerLinkedin?: string | null;
   programmerTwitter?: string | null;
   programmerWebsite?: string | null;
+  appVersion?: string;
+  lastUpdateDetails?: string | null;
+  pwaIcon192?: string | null;
+  pwaIcon512?: string | null;
+  pwaScreenshotDesktop?: string | null;
+  pwaScreenshotMobile?: string | null;
 }

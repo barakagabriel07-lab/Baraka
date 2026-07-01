@@ -157,7 +157,13 @@ export const DEFAULT_CONFIG: SystemConfig = {
   programmerGithub: "https://github.com",
   programmerLinkedin: "https://linkedin.com",
   programmerTwitter: "https://twitter.com",
-  programmerWebsite: "https://muhaspulse.app"
+  programmerWebsite: "https://muhaspulse.app",
+  appVersion: "1.1.0",
+  lastUpdateDetails: "Initial deployment of red line heart rate monitor and robust PWA configuration",
+  pwaIcon192: "/icon-192.png",
+  pwaIcon512: "/icon-512.png",
+  pwaScreenshotDesktop: "/screenshot-desktop.jpg",
+  pwaScreenshotMobile: "/screenshot-mobile.jpg"
 };
 
 export const INITIAL_NEWS = [

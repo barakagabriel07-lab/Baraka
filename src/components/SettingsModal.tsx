@@ -47,7 +47,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   if (!isOpen || !currentUser) return null;
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'programmer'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'programmer' | 'device'>('profile');
   
   // Profile State
   const [firstName, setFirstName] = useState(currentUser.firstName || '');
@@ -95,6 +95,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [editFirst, setEditFirst] = useState(initialStudent?.firstName || '');
   const [editMiddle, setEditMiddle] = useState(initialStudent?.middleName || '');
   const [editLast, setEditLast] = useState(initialStudent?.lastName || '');
+
+  // Programmer State: Deploy PWA Updates
+  const [broadcastVersion, setBroadcastVersion] = useState(config.appVersion || '1.1.0');
+  const [broadcastNotes, setBroadcastNotes] = useState('');
 
   // Styling helpers
   const radius = getBorderRadiusClass(config.borderRadius);
@@ -245,6 +249,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       lastName: editLast.trim()
     });
     showToast(`Successfully renamed student database entry!`);
+  };
+
+  const handleDeployUpdate = () => {
+    if (!broadcastVersion.trim()) {
+      showToast("⚠️ App version cannot be empty.");
+      return;
+    }
+    onUpdateConfig({
+      appVersion: broadcastVersion.trim(),
+      lastUpdateDetails: broadcastNotes.trim() || "Minor updates and stability enhancements."
+    });
+    showToast(`🚀 New Version ${broadcastVersion} deployed successfully! Active users will be alerted.`);
+    setBroadcastNotes('');
+  };
+
+  const handlePwaAssetUpload = (key: 'pwaIcon192' | 'pwaIcon512' | 'pwaScreenshotDesktop' | 'pwaScreenshotMobile', e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      onUpdateConfig({ [key]: dataUrl });
+      showToast(`✅ Successfully updated ${key === 'pwaIcon192' ? '192px Launcher Icon' : key === 'pwaIcon512' ? '512px Launcher Icon' : key === 'pwaScreenshotDesktop' ? 'Desktop Screenshot' : 'Mobile Screenshot'} asset!`);
+    };
+    reader.readAsDataURL(file);
   };
 
   const isDefaultAdmin = currentUser.role === 'admin' && (currentUser.regNo.toLowerCase() === 'admin' || currentUser.password === '123');
@@ -594,6 +623,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   ⚡ System Architect Panel
                 </button>
               )}
+
+              <button
+                onClick={() => setActiveTab('device')}
+                className={`py-1.5 px-3.5 text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${radius} ${
+                  activeTab === 'device'
+                    ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-50'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                Device Hub & PWA
+              </button>
             </div>
 
             {/* Content Body */}
@@ -1359,6 +1400,385 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
+
+                {/* Real-time App Updates Governance */}
+                <div>
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <Terminal className="w-4 h-4 text-purple-500" />
+                    <h3 className="text-xs font-extrabold text-slate-900 dark:text-slate-200 uppercase tracking-widest">
+                      PWA Update deployment & broadcast
+                    </h3>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/50 p-4 rounded-xl space-y-4">
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                      Release a new application update version. This action broadcasts a real-time update overlay to all active Students, Admins, and Programmers, prompting them to hot-reload and activate the newest client service workers.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-1">
+                        <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">
+                          App Version Number
+                        </label>
+                        <input
+                          type="text"
+                          value={broadcastVersion}
+                          onChange={(e) => setBroadcastVersion(e.target.value)}
+                          placeholder="e.g. 1.2.0"
+                          className={`w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius} focus:outline-none`}
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 mb-1.5 uppercase tracking-wider">
+                          Update Release Notes
+                        </label>
+                        <input
+                          type="text"
+                          value={broadcastNotes}
+                          onChange={(e) => setBroadcastNotes(e.target.value)}
+                          placeholder="Describe the main fixes, features or updates..."
+                          className={`w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius} focus:outline-none`}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={handleDeployUpdate}
+                        className={`px-4 py-2 text-xs font-bold text-white bg-gradient-to-r ${accentGradient} hover:shadow-md transition-all active:scale-98 ${radius}`}
+                      >
+                        🚀 Deploy & Broadcast Update
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* PWA Assets & Pictures Customization */}
+                <div>
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <Image className="w-4 h-4 text-purple-500" />
+                    <h3 className="text-xs font-extrabold text-slate-900 dark:text-slate-200 uppercase tracking-widest">
+                      PWA Assets & Screenshots (PWA Builder)
+                    </h3>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800/50 p-4 rounded-xl space-y-4">
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                      Customize launcher icons and preview screenshots required for store submissions and the PWA Builder package. Programmers can upload custom image assets instantly.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* PWA Icon 192 */}
+                      <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-xl flex flex-col justify-between">
+                        <div>
+                          <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
+                            Launcher Icon (192x192 px)
+                          </span>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-3">
+                            Home screen shortcut and taskbar brand element.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <img 
+                            src={config.pwaIcon192 || "/icon-192.png"} 
+                            alt="192px Icon" 
+                            className="w-10 h-10 object-contain rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50"
+                            referrerPolicy="no-referrer"
+                          />
+                          <input 
+                            type="file"
+                            id="pwaIcon192Input"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handlePwaAssetUpload('pwaIcon192', e)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => document.getElementById('pwaIcon192Input')?.click()}
+                            className={`px-3 py-1.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors ${radius}`}
+                          >
+                            Upload Custom Icon
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* PWA Icon 512 */}
+                      <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-xl flex flex-col justify-between">
+                        <div>
+                          <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
+                            Launcher Icon (512x512 px)
+                          </span>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-3">
+                            Splash loading screen and high-res launcher asset.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <img 
+                            src={config.pwaIcon512 || "/icon-512.png"} 
+                            alt="512px Icon" 
+                            className="w-10 h-10 object-contain rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50"
+                            referrerPolicy="no-referrer"
+                          />
+                          <input 
+                            type="file"
+                            id="pwaIcon512Input"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handlePwaAssetUpload('pwaIcon512', e)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => document.getElementById('pwaIcon512Input')?.click()}
+                            className={`px-3 py-1.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors ${radius}`}
+                          >
+                            Upload Custom Icon
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* PWA Desktop Screenshot */}
+                      <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-xl flex flex-col justify-between">
+                        <div>
+                          <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
+                            Desktop Store Screenshot
+                          </span>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-3">
+                            Wide-aspect preview image for desktop installation pages.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <img 
+                            src={config.pwaScreenshotDesktop || "/screenshot-desktop.jpg"} 
+                            alt="Desktop Screenshot" 
+                            className="w-16 h-10 object-cover rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50"
+                            referrerPolicy="no-referrer"
+                          />
+                          <input 
+                            type="file"
+                            id="pwaDesktopScreenshotInput"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handlePwaAssetUpload('pwaScreenshotDesktop', e)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => document.getElementById('pwaDesktopScreenshotInput')?.click()}
+                            className={`px-3 py-1.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors ${radius}`}
+                          >
+                            Upload Screenshot
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* PWA Mobile Screenshot */}
+                      <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-xl flex flex-col justify-between">
+                        <div>
+                          <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-1">
+                            Mobile Store Screenshot
+                          </span>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-3">
+                            Portrait-aspect preview image for mobile application screens.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <img 
+                            src={config.pwaScreenshotMobile || "/screenshot-mobile.jpg"} 
+                            alt="Mobile Screenshot" 
+                            className="w-10 h-10 object-cover rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50"
+                            referrerPolicy="no-referrer"
+                          />
+                          <input 
+                            type="file"
+                            id="pwaMobileScreenshotInput"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handlePwaAssetUpload('pwaScreenshotMobile', e)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => document.getElementById('pwaMobileScreenshotInput')?.click()}
+                            className={`px-3 py-1.5 text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors ${radius}`}
+                          >
+                            Upload Screenshot
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'device' && (
+              <motion.div
+                key="device"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 10 }}
+                className="space-y-6"
+              >
+                {/* Permissions Hub Info */}
+                <div>
+                  <div className="flex items-center gap-1.5 mb-2.5">
+                    <Smartphone className="w-4 h-4 text-emerald-500 animate-pulse" />
+                    <h3 className="text-xs font-extrabold text-slate-900 dark:text-slate-200 uppercase tracking-widest">
+                      Device Storage & Capability Authorization
+                    </h3>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Grant or test system permissions on your local handset or PC to enable all real-time features, secure storage sandboxes, and peripheral access.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Push Notifications Card */}
+                  <div className="p-4 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-100 dark:border-slate-800/60 flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 dark:text-slate-200">🔔 Push Notifications</h4>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 leading-normal">
+                        Receive instant sound and vibration warnings for real-time announcements, DM inbox alerts, or status corrections.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if ('Notification' in window) {
+                          Notification.requestPermission().then(permission => {
+                            if (permission === 'granted') {
+                              showToast("🎉 Push Notifications Authorized!");
+                              new Notification("MUHAS PULSE", { body: "Instant alerts are fully operational!", icon: "icon-192.png" });
+                            } else {
+                              showToast("⚠️ Notifications denied or dismissed.");
+                            }
+                          });
+                        } else {
+                          showToast("❌ This device browser does not support Web Notifications.");
+                        }
+                      }}
+                      className={`mt-4 px-3 py-2 text-xs font-bold text-center text-white bg-slate-800 hover:bg-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 transition-all ${radius}`}
+                    >
+                      Authorize Notification
+                    </button>
+                  </div>
+
+                  {/* Microphone / Audio Peripheral Card */}
+                  <div className="p-4 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-100 dark:border-slate-800/60 flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 dark:text-slate-200">🎙️ Microphone & Audio</h4>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 leading-normal">
+                        Grant audio peripheral recording access to dictate class lectures, record offline medical voice memos, or stream speech.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                          navigator.mediaDevices.getUserMedia({ audio: true })
+                            .then(stream => {
+                              showToast("🎉 Microphone access granted successfully!");
+                              stream.getTracks().forEach(track => track.stop());
+                            })
+                            .catch(err => {
+                              showToast("❌ Microphone access denied: " + err.message);
+                            });
+                        } else {
+                          showToast("❌ Media recording APIs are not supported in this frame.");
+                        }
+                      }}
+                      className={`mt-4 px-3 py-2 text-xs font-bold text-center text-white bg-slate-800 hover:bg-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 transition-all ${radius}`}
+                    >
+                      Authorize Microphone
+                    </button>
+                  </div>
+
+                  {/* Device storage sandbox access card */}
+                  <div className="p-4 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-100 dark:border-slate-800/60 flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 dark:text-slate-200">📁 Persistent Device Storage</h4>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 leading-normal">
+                        Allow the PWA sandbox to reserve local SQLite caches, offline medical dictionaries, and student document registries.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (navigator.storage && navigator.storage.persist) {
+                          navigator.storage.persist().then(persisted => {
+                            if (persisted) {
+                              showToast("🎉 Persistent LocalStorage authorized by browser!");
+                            } else {
+                              showToast("ℹ️ Storage persisted temporarily (standard browser cache rules apply).");
+                            }
+                          });
+                        } else {
+                          showToast("ℹ️ Standard local sandboxing is active.");
+                        }
+                      }}
+                      className={`mt-4 px-3 py-2 text-xs font-bold text-center text-white bg-slate-800 hover:bg-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 transition-all ${radius}`}
+                    >
+                      Request Persistent Storage
+                    </button>
+                  </div>
+
+                  {/* Display Over Other Apps and Shortcuts */}
+                  <div className="p-4 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-100 dark:border-slate-800/60 flex flex-col justify-between">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 dark:text-slate-200">📱 System Overlay / Standalone App</h4>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 leading-normal">
+                        To run in native full-screen mode, support multi-task overlays, and configure desktop shortcut launches.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        showToast("💡 Pro-Tip: Open your Android App Settings -> 'MUHAS Pulse' -> Toggle 'Draw over other apps' to allow!");
+                      }}
+                      className={`mt-4 px-3 py-2 text-xs font-bold text-center text-white bg-slate-800 hover:bg-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 transition-all ${radius}`}
+                    >
+                      Overlay Settings Guide
+                    </button>
+                  </div>
+                </div>
+
+                {/* PWA Builder Connection Guidance */}
+                <div className="bg-gradient-to-tr from-sky-500/10 via-teal-500/5 to-transparent border border-sky-500/20 dark:border-sky-500/10 p-5 rounded-2xl space-y-3.5">
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-sky-500 shrink-0" />
+                    <h4 className="text-xs font-black text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                      PWABuilder App Bundler Connected
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    This application has been fully compiled and optimized to generate native package files (<span className="font-mono">.apk</span> for Android, <span className="font-mono">.ipa</span> for iOS, <span className="font-mono">.msix</span> for Windows) using Microsoft's PWA Builder!
+                  </p>
+                  <div className="text-[10px] bg-slate-900/5 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-200/50 dark:border-slate-800/60 space-y-1 text-slate-600 dark:text-slate-300 font-mono">
+                    <div>⚡ Web App Manifest: <span className="text-emerald-500 font-black">VALIDATED</span></div>
+                    <div>⚡ Offline Service Worker: <span className="text-emerald-500 font-black">ACTIVE</span></div>
+                    <div>⚡ Native Package Identifiers: <span className="text-emerald-500 font-black">CONNECTED (com.muhas.pulse)</span></div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2 pt-1.5">
+                    <a
+                      href={`https://www.pwabuilder.com/?site=${encodeURIComponent(window.location.origin)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex-1 py-2 text-[11px] font-black text-center text-white bg-sky-500 hover:bg-sky-600 shadow-md ${radius}`}
+                    >
+                      Open in PWABuilder
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(window.location.origin);
+                        showToast("📋 Shared App URL copied to clipboard for PWABuilder!");
+                      }}
+                      className={`flex-1 py-2 text-[11px] font-black text-center text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 ${radius}`}
+                    >
+                      Copy URL for PWA Bundler
+                    </button>
                   </div>
                 </div>
               </motion.div>

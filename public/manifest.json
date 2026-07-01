@@ -3,14 +3,21 @@
   "short_name": "MUHAS Pulse",
   "description": "A highly polished, interactive student and administrator network dashboard for MUHAS with rich features, secure registry, and chat.",
   "categories": ["education", "medical", "productivity"],
-  "scope": "/",
-  "start_url": "/",
-  "id": "/",
+  "scope": "./",
+  "start_url": "index.html",
+  "id": "muhas-pulse-student-network",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0ea5e9",
   "orientation": "portrait",
   "prefer_related_applications": false,
+  "related_applications": [
+    {
+      "platform": "play",
+      "url": "https://play.google.com/store/apps/details?id=com.muhas.pulse",
+      "id": "com.muhas.pulse"
+    }
+  ],
   "icons": [
     {
       "src": "icon-192.png",
