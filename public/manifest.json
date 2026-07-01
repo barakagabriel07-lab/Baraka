@@ -4,7 +4,7 @@
   "description": "A highly polished, interactive student and administrator network dashboard for MUHAS with rich features, secure registry, and chat.",
   "categories": ["education", "medical", "productivity"],
   "scope": "./",
-  "start_url": "index.html",
+  "start_url": "./",
   "id": "muhas-pulse-student-network",
   "display": "standalone",
   "background_color": "#0f172a",
@@ -49,7 +49,7 @@
       "name": "Dashboard",
       "short_name": "Dashboard",
       "description": "Open student dashboard",
-      "url": "index.html",
+      "url": "./",
       "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
     }
   ],

@@ -784,22 +784,7 @@ export default function App() {
     }
 
     setAuthLoadingState('signin');
-    setAuthLoadingMessage('Establishing handshake with secure database node...');
-
-    const steps = [
-      'Establishing handshake with secure database node...',
-      `Scanning student registers for: "${loginRegNo}"...`,
-      'Validating security passphrase token...',
-      'Unlocking secure encrypted user workspace session...'
-    ];
-
-    let currentStep = 0;
-    const interval = setInterval(() => {
-      if (currentStep < steps.length - 1) {
-        currentStep++;
-        setAuthLoadingMessage(steps[currentStep]);
-      }
-    }, 450);
+    setAuthLoadingMessage('Logging in...');
 
     try {
       await signInWithEmailAndPassword(auth, match.email, loginPassword);
@@ -810,10 +795,8 @@ export default function App() {
           await createUserWithEmailAndPassword(auth, match.email, loginPassword);
         } catch (createErr: any) {
           console.warn("Seed auth creation failed, but password matched in Firestore. Logging in via database credential fallback.", createErr);
-          // Proceed with login since password is valid in Firestore database!
         }
       } else {
-        clearInterval(interval);
         setAuthLoadingState(null);
         setLoginWarningFields(['loginRegNo', 'loginPassword']);
         setLoginError("⚠️ Incorrect Credentials! The registration number or password entered is invalid.");
@@ -822,9 +805,6 @@ export default function App() {
       }
     }
 
-    // Hold the loading screen briefly for visual feedback
-    await new Promise(resolve => setTimeout(resolve, 1800));
-    clearInterval(interval);
     setAuthLoadingState(null);
 
     setSessionUserReg(match.regNo);
@@ -914,23 +894,7 @@ export default function App() {
     };
 
     setAuthLoadingState('register');
-    setAuthLoadingMessage('Initializing secure registration protocol...');
-
-    const steps = [
-      'Initializing secure registration protocol...',
-      `Generating student registry credentials for: "${regRegNo}"...`,
-      'Creating Firebase Authentication credentials...',
-      'Deploying secure user profile schemas into Firestore database...',
-      'Issuing simulated SMTP welcome package...'
-    ];
-
-    let currentStep = 0;
-    const interval = setInterval(() => {
-      if (currentStep < steps.length - 1) {
-        currentStep++;
-        setAuthLoadingMessage(steps[currentStep]);
-      }
-    }, 450);
+    setAuthLoadingMessage('Creating your profile...');
 
     try {
       if (isGoogleRegistration) {
@@ -941,12 +905,10 @@ export default function App() {
           await createUserWithEmailAndPassword(auth, regEmail, regPassword);
         } catch (authErr: any) {
           console.warn("Firebase Auth user creation failed (Email/Password provider might be disabled in Firebase Console), falling back to database-only user profile registration:", authErr);
-          // If the Firebase Email/Password provider is disabled, we gracefully proceed to register the user in Firestore!
         }
         await setDoc(doc(db, "users", regRegNo.toLowerCase()), newUser);
       }
     } catch (err: any) {
-      clearInterval(interval);
       setAuthLoadingState(null);
       console.error("Auth registration failed", err);
       setRegisterError(`⚠️ Registration Error: ${err.message}`);
@@ -954,9 +916,6 @@ export default function App() {
       return;
     }
     
-    // Guarantee loading visual plays through
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    clearInterval(interval);
     setAuthLoadingState(null);
     
     // Send SMTP registration confirmation preview
@@ -1530,10 +1489,12 @@ export default function App() {
                   <h1 className="text-2xl font-black text-slate-900 dark:text-slate-50 font-sans tracking-tight">
                     {config.siteName}
                   </h1>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-widest mt-1">
+                  <p className="text-xs text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-widest mt-1 text-center">
                     Medical & Allied Students Portal
                   </p>
-                  <ECGAnimation idPrefix="auth" />
+                  <div className="w-full max-w-[200px] mx-auto mt-2">
+                    <ECGAnimation idPrefix="auth" />
+                  </div>
                 </div>
 
 
@@ -1584,36 +1545,6 @@ export default function App() {
                 transition={{ duration: 0.6, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
                 className={`sm:max-w-md sm:w-full sm:mx-auto p-6 sm:p-8 ${getGlassmorphismClass(config.glassmorphism)} ${radius} shadow-2xl relative overflow-hidden`}
               >
-                {/* Modern clean loading animation overlay */}
-                <AnimatePresence>
-                  {authLoadingState && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="absolute inset-0 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center select-none"
-                    >
-                      <div className="relative flex flex-col items-center">
-                        {/* Elegant modern spinner */}
-                        <div className="relative w-16 h-16 mb-4">
-                          <div className="absolute inset-0 rounded-full border-4 border-slate-200 dark:border-slate-800/80" />
-                          <motion.div
-                            animate={{ rotate: 360 }}
-                            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                            className={`absolute inset-0 rounded-full border-4 border-t-transparent ${config.colorAccent === 'teal' ? 'border-teal-500' : config.colorAccent === 'coral' ? 'border-red-500' : config.colorAccent === 'amber' ? 'border-amber-500' : config.colorAccent === 'violet' ? 'border-purple-500' : 'border-blue-500'}`}
-                          />
-                        </div>
-                        <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-200 tracking-wide animate-pulse">
-                          {authLoadingState === 'signin' ? 'Signing in...' : authLoadingState === 'register' ? 'Creating your account...' : 'Logging out...'}
-                        </h3>
-                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5 font-medium font-sans">
-                          {authLoadingMessage || 'Please wait a moment'}
-                        </p>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
                 <AnimatePresence mode="wait">
                   {authTab === 'login' ? (
                     /* LOGIN CARD */
@@ -1699,9 +1630,24 @@ export default function App() {
 
                       <button
                         type="submit"
-                        className={`w-full py-3 text-xs font-bold text-white bg-gradient-to-r ${accentGradient} ${radius} hover:shadow-lg transition-all active:scale-98`}
+                        disabled={authLoadingState !== null}
+                        className={`w-full py-2.5 px-4 text-xs font-bold text-white bg-gradient-to-r ${accentGradient} ${radius} hover:shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 min-h-[44px]`}
                       >
-                        Log In
+                        {authLoadingState === 'signin' ? (
+                          <div className="flex items-center gap-2 justify-center">
+                            <div className="relative w-4 h-4 animate-spin shrink-0">
+                              <div className="absolute top-0 left-1.5 w-1 h-1 rounded-full bg-white opacity-100" />
+                              <div className="absolute top-0.5 right-0.5 w-1 h-1 rounded-full bg-white opacity-85" />
+                              <div className="absolute top-1.5 right-0 w-1 h-1 rounded-full bg-white opacity-70" />
+                              <div className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-full bg-white opacity-55" />
+                              <div className="absolute bottom-0 left-1.5 w-1 h-1 rounded-full bg-white opacity-40" />
+                              <div className="absolute bottom-0.5 left-0.5 w-1 h-1 rounded-full bg-white opacity-25" />
+                            </div>
+                            <span>Signing In...</span>
+                          </div>
+                        ) : (
+                          <span>Log In</span>
+                        )}
                       </button>
 
                       <div className="flex items-center my-4">
@@ -1744,10 +1690,6 @@ export default function App() {
                         >
                           Forgot Password? Request bypass
                         </button>
-                      </div>
-
-                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                        <ECGAnimation idPrefix="login-bottom" size="sm" />
                       </div>
                     </motion.form>
                   ) : (
@@ -2045,16 +1987,27 @@ export default function App() {
                         )}
                       </div>
 
-                      <button
+                       <button
                         type="submit"
-                        className={`w-full py-3 text-xs font-bold text-white bg-gradient-to-r ${accentGradient} ${radius} hover:shadow-lg transition-all active:scale-98`}
+                        disabled={authLoadingState !== null}
+                        className={`w-full py-2.5 px-4 text-xs font-bold text-white bg-gradient-to-r ${accentGradient} ${radius} hover:shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 min-h-[44px]`}
                       >
-                        Create Student Account
+                        {authLoadingState === 'register' ? (
+                          <div className="flex items-center gap-2 justify-center">
+                            <div className="relative w-4 h-4 animate-spin shrink-0">
+                              <div className="absolute top-0 left-1.5 w-1 h-1 rounded-full bg-white opacity-100" />
+                              <div className="absolute top-0.5 right-0.5 w-1 h-1 rounded-full bg-white opacity-85" />
+                              <div className="absolute top-1.5 right-0 w-1 h-1 rounded-full bg-white opacity-70" />
+                              <div className="absolute bottom-0.5 right-0.5 w-1 h-1 rounded-full bg-white opacity-55" />
+                              <div className="absolute bottom-0 left-1.5 w-1 h-1 rounded-full bg-white opacity-40" />
+                              <div className="absolute bottom-0.5 left-0.5 w-1 h-1 rounded-full bg-white opacity-25" />
+                            </div>
+                            <span>Creating Account...</span>
+                          </div>
+                        ) : (
+                          <span>Create Student Account</span>
+                        )}
                       </button>
-
-                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                        <ECGAnimation idPrefix="register-bottom" size="sm" />
-                      </div>
                     </motion.form>
                   )}
                 </AnimatePresence>
@@ -2096,8 +2049,6 @@ export default function App() {
                         <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase font-mono tracking-wider animate-pulse flex items-center gap-1">
                           Network Central · <span className="text-emerald-500 dark:text-emerald-400 font-extrabold animate-pulse">LIVE</span>
                         </span>
-                        <span className="border-l border-slate-200 dark:border-slate-800/80 h-2.5 mx-1 shrink-0" />
-                        <ECGAnimation size="sm" idPrefix="topbar" />
                       </div>
                     </div>
                   </div>

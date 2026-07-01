@@ -181,13 +181,6 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             </div>
           )}
 
-          {/* Render the ECG Animation specifically for Logout or danger style confirmations */}
-          {type === 'danger' && (
-            <div className="w-full mt-4 border-t border-slate-100 dark:border-slate-800/80 pt-3">
-              <ECGAnimation idPrefix="logout-dialog" />
-            </div>
-          )}
-
           <div className="flex items-center gap-3 w-full mt-6">
             <button
               onClick={onClose}
@@ -197,7 +190,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             </button>
             <button
               onClick={onConfirm}
-              className={`flex-1 py-2.5 px-4 text-sm font-semibold text-white ${radius} bg-gradient-to-r ${type === 'danger' ? 'from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700' : accentGradient} hover:shadow-lg transition-all active:scale-98`}
+              className={`flex-1 py-2.5 px-4 text-sm font-bold text-white ${radius} bg-gradient-to-r ${type === 'danger' ? 'from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700' : accentGradient} hover:shadow-lg transition-all active:scale-98`}
             >
               {confirmText}
             </button>
