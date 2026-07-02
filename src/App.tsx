@@ -2256,36 +2256,6 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Animated chat action button - inline at level of footer */}
-                {currentUser?.role === 'user' && (
-                  <div className="flex justify-end pr-4 pt-2 pb-4">
-                    <motion.button
-                      animate={{
-                        y: [0, -6, 0],
-                        scale: [1, 1.05, 1],
-                      }}
-                      transition={{
-                        duration: 3,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                      }}
-                      whileHover={{ scale: 1.12, y: -8 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => {
-                        setIsChatOpen(true);
-                      }}
-                      className={`w-12 h-12 rounded-full bg-gradient-to-tr ${accentGradient} text-white flex items-center justify-center shadow-lg shrink-0 relative`}
-                    >
-                      <MessageSquare className="w-5 h-5" />
-                      {unreadCounts && unreadCounts.total > 0 && (
-                        <span className="absolute -top-1 -right-1 min-w-[18px] h-4.5 px-1 flex items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white border-2 border-slate-50 dark:border-slate-900 animate-pulse shadow-sm">
-                          {unreadCounts.total}
-                        </span>
-                      )}
-                    </motion.button>
-                  </div>
-                )}
-
                 {/* Inline workspace footer */}
                 <footer className="py-4 border-t border-slate-200/40 dark:border-slate-800/20 text-center text-[10px] text-slate-400 dark:text-slate-500 font-mono tracking-wide">
                   © 2026 Baraka. All rights reserved.
@@ -2300,6 +2270,33 @@ export default function App() {
           <footer className="py-4 border-t border-slate-200/40 dark:border-slate-800/20 text-center text-[10px] text-slate-400 dark:text-slate-500 font-mono tracking-wide mt-auto">
             © 2026 Baraka. All rights reserved.
           </footer>
+        )}
+
+        {/* Draggable Floating Chat Action Button */}
+        {currentUser && (
+          <motion.div
+            drag
+            dragMomentum={false}
+            dragElastic={0.05}
+            whileDrag={{ scale: 1.15, cursor: "grabbing" }}
+            style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 100 }}
+            className="touch-none"
+          >
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsChatOpen(true)}
+              className={`w-14 h-14 rounded-full bg-gradient-to-tr ${accentGradient} text-white flex items-center justify-center shadow-2xl cursor-grab relative`}
+              title="Drag me anywhere!"
+            >
+              <MessageSquare className="w-6 h-6" />
+              {unreadCounts && unreadCounts.total > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white border-2 border-slate-50 dark:border-slate-900 animate-pulse shadow-md">
+                  {unreadCounts.total}
+                </span>
+              )}
+            </motion.button>
+          </motion.div>
         )}
       </div>
 

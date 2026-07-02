@@ -608,8 +608,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                       <button
                         onClick={() => {
-                          onRemoveUser(st.regNo);
-                          showToast(`❌ Removed student node from registry: ${st.regNo}`);
+                          if (!isProg && (st.role === 'programmer' || st.role === 'admin' || st.regNo.toLowerCase() === 'admin' || st.regNo.toLowerCase() === 'programmer')) {
+                            showToast("❌ Privilege Block: Only System Programmers can delete administrators, staff, or demo system users.");
+                            return;
+                          }
+                          if (confirm(`Are you sure you want to remove user ${st.firstName} ${st.lastName} (ID: ${st.regNo})?`)) {
+                            onRemoveUser(st.regNo);
+                            showToast(`❌ Removed user from registry: ${st.regNo}`);
+                          }
                         }}
                         className="p-1.5 bg-red-50 dark:bg-red-950/20 text-red-500 rounded hover:bg-red-100"
                       >
@@ -647,9 +653,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <p className="text-[10px] text-slate-400 mt-0.5 font-mono">Role: {staff.role} · Email: {staff.email}</p>
                     </div>
 
-                    <span className="text-[10px] bg-purple-50 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded font-black uppercase">
-                      Admin Staff
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] bg-purple-50 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded font-black uppercase">
+                        {staff.role === 'programmer' ? 'Programmer' : 'Admin Staff'}
+                      </span>
+                      {isProg && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`Are you sure you want to remove staff member ${staff.firstName} ${staff.lastName} (ID: ${staff.regNo})?`)) {
+                              onRemoveUser(staff.regNo);
+                              showToast(`❌ Removed staff member: ${staff.firstName} ${staff.lastName}`);
+                            }
+                          }}
+                          className="p-1.5 bg-red-50 dark:bg-red-950/20 text-red-500 rounded hover:bg-red-100"
+                          title="Delete Staff Member"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
             </div>
