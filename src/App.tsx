@@ -805,6 +805,13 @@ export default function App() {
       }
     }
 
+    if (match.approved === false) {
+      setAuthLoadingState(null);
+      setLoginError("🔒 Pending Approval! Your account has been registered successfully but requires administrator approval before logging in.");
+      showToast("❌ Account pending administrator approval.");
+      return;
+    }
+
     setAuthLoadingState(null);
 
     setSessionUserReg(match.regNo);
@@ -890,7 +897,8 @@ export default function App() {
       password: regPassword || "google-auth-linked",
       role: 'user',
       photo: auth.currentUser?.photoURL || null,
-      chatAlias: regFirst
+      chatAlias: regFirst,
+      approved: false
     };
 
     setAuthLoadingState('register');
@@ -2202,6 +2210,9 @@ export default function App() {
                     onSubmitReport={handleCreateReport}
                     onOpenAdminDirectory={() => setIsAdminDirectoryOpen(true)}
                     showToast={showToast}
+                    onOpenChat={() => setIsChatOpen(true)}
+                    onOpenMaterials={() => setIsMaterialsOpen(true)}
+                    onOpenNotifications={() => setIsAnnouncementsOpen(true)}
                   />
                 ) : (
                   <AdminDashboard
@@ -2245,39 +2256,41 @@ export default function App() {
                   </button>
                 </div>
 
+                {/* Animated chat action button - inline at level of footer */}
+                {currentUser?.role === 'user' && (
+                  <div className="flex justify-end pr-4 pt-2 pb-4">
+                    <motion.button
+                      animate={{
+                        y: [0, -6, 0],
+                        scale: [1, 1.05, 1],
+                      }}
+                      transition={{
+                        duration: 3,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                      whileHover={{ scale: 1.12, y: -8 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        setIsChatOpen(true);
+                      }}
+                      className={`w-12 h-12 rounded-full bg-gradient-to-tr ${accentGradient} text-white flex items-center justify-center shadow-lg shrink-0 relative`}
+                    >
+                      <MessageSquare className="w-5 h-5" />
+                      {unreadCounts && unreadCounts.total > 0 && (
+                        <span className="absolute -top-1 -right-1 min-w-[18px] h-4.5 px-1 flex items-center justify-center rounded-full bg-red-500 text-[9px] font-black text-white border-2 border-slate-50 dark:border-slate-900 animate-pulse shadow-sm">
+                          {unreadCounts.total}
+                        </span>
+                      )}
+                    </motion.button>
+                  </div>
+                )}
+
                 {/* Inline workspace footer */}
                 <footer className="py-4 border-t border-slate-200/40 dark:border-slate-800/20 text-center text-[10px] text-slate-400 dark:text-slate-500 font-mono tracking-wide">
                   © 2026 Baraka. All rights reserved.
                 </footer>
               </div>
-
-              {/* Floating Chat action bubble (Students only) */}
-              {currentUser.role === 'user' && (
-                <motion.button
-                  animate={{
-                    y: [0, -10, 0],
-                    scale: [1, 1.05, 1],
-                  }}
-                  transition={{
-                    duration: 3,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
-                  whileHover={{ scale: 1.15, y: -12 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    setIsChatOpen(true);
-                  }}
-                  className={`fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-gradient-to-tr ${accentGradient} text-white flex items-center justify-center shadow-2xl shrink-0`}
-                >
-                  <MessageSquare className="w-6 h-6" />
-                  {unreadCounts && unreadCounts.total > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white border-2 border-slate-50 dark:border-slate-900 animate-pulse shadow-md">
-                      {unreadCounts.total}
-                    </span>
-                  )}
-                </motion.button>
-              )}
             </motion.div>
           )}
         </AnimatePresence>

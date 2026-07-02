@@ -3,12 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShieldAlert, Settings, Palette, Type, Sliders, Sparkles, Terminal, 
   Trash2, Plus, Download, UserCheck, Shield, Key, Mail, MessageSquare, 
-  Search, Eye, EyeOff, CheckCircle2, Volume2, Globe, FileSignature, Users, Heart, BookOpen
+  Search, Eye, EyeOff, CheckCircle2, Volume2, Globe, FileSignature, Users, Heart, BookOpen,
+  UserX, Award, DollarSign, Activity, FileText, Check, X, ShieldCheck, Layers, Landmark, Calendar
 } from 'lucide-react';
 import { User as UserType, SystemConfig, Report, PasswordReset, DocumentMaterial } from '../types';
 import { 
@@ -17,6 +18,8 @@ import {
   getGlassmorphismClass 
 } from './CommonUI';
 import { DOCUMENT_CATEGORIES } from '../data';
+import { doc, updateDoc, deleteDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
 
 interface AdminDashboardProps {
   currentUser: UserType;
@@ -59,33 +62,123 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onRemoveUser,
   showToast
 }) => {
-  const [activeTab, setActiveTab] = useState<'home' | 'health' | 'academic' | 'social' | 'students' | 'resets' | 'materials' | 'news' | 'admins' | 'identity'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'approvals' | 'students' | 'staff' | 'departments' | 'courses' | 'results' | 'announcements' | 'reports' | 'finances' | 'settings' | 'timetable'>('home');
   
-  // Search & Filter
+  // Timetable Editor states
+  const [selectedTimetableDay, setSelectedTimetableDay] = useState<'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri'>('Mon');
+  const defaultTimetable = {
+    Mon: [
+      { time: '08:00 AM - 10:00 AM', course: 'Systemic Pathology', venue: 'Lecture Hall 2', type: 'Lecture', instructor: 'Prof. E. Mshinda' },
+      { time: '10:30 AM - 12:30 PM', course: 'Medical Biochemistry', venue: 'Lab B1', type: 'Practical', instructor: 'Dr. S. Lyamuya' }
+    ],
+    Tue: [
+      { time: '09:00 AM - 11:00 AM', course: 'Human Anatomy I', venue: 'Lecture Hall 1', type: 'Lecture', instructor: 'Prof. J. Masau' },
+      { time: '01:00 PM - 03:00 PM', course: 'Medical Physiology', venue: 'Lecture Hall 3', type: 'Lecture', instructor: 'Prof. K. Pallangyo' }
+    ],
+    Wed: [
+      { time: '10:00 AM - 12:00 PM', course: 'Medical Microbiology', venue: 'Lab C2', type: 'Practical', instructor: 'Dr. L. Mboera' },
+      { time: '02:00 PM - 04:00 PM', course: 'Human Anatomy I', venue: 'Dissection Room 4', type: 'Dissection', instructor: 'Prof. J. Masau' }
+    ],
+    Thu: [
+      { time: '08:00 AM - 10:00 AM', course: 'Medical Biochemistry', venue: 'Lecture Hall 2', type: 'Lecture', instructor: 'Dr. S. Lyamuya' },
+      { time: '11:00 AM - 01:00 PM', course: 'Systemic Pathology', venue: 'Lab B3', type: 'Practical', instructor: 'Prof. E. Mshinda' }
+    ],
+    Fri: [
+      { time: '09:00 AM - 11:00 AM', course: 'Medical Physiology', venue: 'Lab A4', type: 'Practical', instructor: 'Prof. K. Pallangyo' },
+      { time: '02:00 PM - 04:00 PM', course: 'Pharmacology & Therapeutics', venue: 'Lecture Hall 1', type: 'Seminar', instructor: 'Dr. R. Kisenge' }
+    ]
+  };
+
+  const [weeklyTimetable, setWeeklyTimetable] = useState<{
+    Mon: { time: string; course: string; venue: string; type: string; instructor: string }[];
+    Tue: { time: string; course: string; venue: string; type: string; instructor: string }[];
+    Wed: { time: string; course: string; venue: string; type: string; instructor: string }[];
+    Thu: { time: string; course: string; venue: string; type: string; instructor: string }[];
+    Fri: { time: string; course: string; venue: string; type: string; instructor: string }[];
+  }>(defaultTimetable);
+
+  // Sync timetable state live from firestore onSnapshot
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "timetable", "weekly"), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data && data.timetable) {
+          setWeeklyTimetable(data.timetable);
+        }
+      } else {
+        setDoc(doc(db, "timetable", "weekly"), { timetable: defaultTimetable }).catch(console.error);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const [slotTime, setSlotTime] = useState('');
+  const [slotCourse, setSlotCourse] = useState('');
+  const [slotVenue, setSlotVenue] = useState('');
+  const [slotType, setSlotType] = useState('Lecture');
+  const [slotInstructor, setSlotInstructor] = useState('');
+  const [editingSlotIndex, setEditingSlotIndex] = useState<number | null>(null);
+  const [rawJsonText, setRawJsonText] = useState('');
+  const [showJsonOverrideModal, setShowJsonOverrideModal] = useState(false);
+
+  // Search and selection queries
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmingDeleteRegNo, setConfirmingDeleteRegNo] = useState<string | null>(null);
 
-  // Form states
+  // Results uploader state
+  const [selectedResultStudent, setSelectedResultStudent] = useState('');
+  const [resultCourseId, setResultCourseId] = useState('PL201');
+  const [resultGrade, setResultGrade] = useState('A');
+
+  // Finances uploader state
+  const [selectedFinanceStudent, setSelectedFinanceStudent] = useState('');
+  const [financeDescription, setFinanceDescription] = useState('Semester Tuition Fees');
+  const [financeAmount, setFinanceAmount] = useState('1200000');
+  const [financeType, setFinanceType] = useState<'invoice' | 'payment'>('invoice');
+
+  // Finances ledgers datasets (local tracking state + simulation)
+  const [financials, setFinancials] = useState([
+    { id: 'f-1', regNo: '2026-11-00201', description: 'Semester II Tuition Fee', amount: 1500000, type: 'invoice', date: '2026-06-15' },
+    { id: 'f-2', regNo: '2026-11-00201', description: 'NHIF Health Insurance Payment', amount: 50000, type: 'payment', date: '2026-06-16' },
+    { id: 'f-3', regNo: '2026-11-00302', description: 'Library Access Fee', amount: 30000, type: 'invoice', date: '2026-06-18' }
+  ]);
+
+  // Departments and courses state list
+  const [departments, setDepartments] = useState([
+    { id: 'ANAT', name: 'Anatomy & Histology', head: 'Prof. J. Masau', staffCount: 8 },
+    { id: 'PATH', name: 'Pathology & Forensics', head: 'Prof. E. Mshinda', staffCount: 6 },
+    { id: 'BIOC', name: 'Biochemistry & Molecular Biology', head: 'Dr. S. Lyamuya', staffCount: 5 },
+    { id: 'PHYS', name: 'Physiology & Biophysics', head: 'Prof. K. Pallangyo', staffCount: 7 }
+  ]);
+  const [newDeptId, setNewDeptId] = useState('');
+  const [newDeptName, setNewDeptName] = useState('');
+  const [newDeptHead, setNewDeptHead] = useState('');
+
+  const [courses, setCourses] = useState([
+    { id: 'HA101', name: 'Human Anatomy I', dept: 'ANAT', instructor: 'Prof. J. Masau', credits: 4 },
+    { id: 'BC102', name: 'Medical Biochemistry', dept: 'BIOC', instructor: 'Dr. S. Lyamuya', credits: 4 },
+    { id: 'PL201', name: 'Systemic Pathology', dept: 'PATH', instructor: 'Prof. E. Mshinda', credits: 3 },
+    { id: 'MB202', name: 'Medical Microbiology', dept: 'PATH', instructor: 'Dr. L. Mboera', credits: 3 }
+  ]);
+  const [newCourseId, setNewCourseId] = useState('');
+  const [newCourseName, setNewCourseName] = useState('');
+  const [newCourseDept, setNewCourseDept] = useState('ANAT');
+  const [newCourseInstructor, setNewCourseInstructor] = useState('');
+
+  // Announcement and news states
   const [announcementText, setAnnouncementText] = useState('');
-  const [newsInputText, setNewsInputText] = useState('');
-  
-  // Materials Upload states
+  const [tickerText, setTickerText] = useState('');
+
+  // Report resolution selected subtab
+  const [selectedReportSector, setSelectedReportSector] = useState<'health' | 'academic' | 'social'>('health');
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+
+  // Document material states
   const [docTitle, setDocTitle] = useState('');
   const [docCategory, setDocCategory] = useState('General');
   const [docFile, setDocFile] = useState<{ name: string; dataUrl: string } | null>(null);
 
-  // Direct Password Reset state
-  const [directResetReg, setDirectResetReg] = useState('');
-  const [directResetPwd, setDirectResetPwd] = useState('');
-  const [showDirectPwd, setShowDirectPwd] = useState(false);
-
-  // Quick draft states for replying (mapped by reportId)
-  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
-  // Quick password draft states for resets (mapped by resetId)
-  const [resetPwdDrafts, setResetPwdDrafts] = useState<Record<string, string>>({});
-  const [showResetDraftPwd, setShowResetDraftPwd] = useState<Record<string, boolean>>({});
-
-  // Styles
+  // Style helper setups
   const radius = getBorderRadiusClass(config.borderRadius);
   const accentText = getAccentColorClass(config.colorAccent, 'text');
   const accentBg = getAccentColorClass(config.colorAccent, 'bg');
@@ -93,12 +186,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const isProg = currentUser.role === 'programmer';
 
-  // Sector Counts for unanswered
-  const healthPending = reports.filter(r => r.sector === 'health' && r.status === 'pending').length;
-  const academicPending = reports.filter(r => r.sector === 'academic' && r.status === 'pending').length;
-  const socialPending = reports.filter(r => r.sector === 'social' && r.status === 'pending').length;
-  const resetsPending = passwordResets.filter(r => r.status === 'pending').length;
+  // Sector Counts for unanswered reports
+  const pendingReportsCount = reports.filter(r => r.status === 'pending').length;
+  const healthCount = reports.filter(r => r.sector === 'health' && r.status === 'pending').length;
+  const academicCount = reports.filter(r => r.sector === 'academic' && r.status === 'pending').length;
+  const socialCount = reports.filter(r => r.sector === 'social' && r.status === 'pending').length;
 
+  // Unapproved users list (registrations pending approval)
+  const pendingApprovalsList = allUsers.filter(u => u.approved === false);
+
+  // Registration approvals dispatcher
+  const handleApproveRegistration = async (regNo: string) => {
+    try {
+      const userRef = doc(db, 'users', regNo.toLowerCase());
+      await updateDoc(userRef, { approved: true });
+      showToast(`✅ Approved student registration: ${regNo}`);
+    } catch (err: any) {
+      console.error(err);
+      showToast('❌ Approval failed. Try again.');
+    }
+  };
+
+  const handleRejectRegistration = async (regNo: string) => {
+    try {
+      const userRef = doc(db, 'users', regNo.toLowerCase());
+      await deleteDoc(userRef);
+      showToast(`❌ Rejected and deleted student registry node: ${regNo}`);
+    } catch (err: any) {
+      console.error(err);
+      showToast('❌ Rejection failed. Try again.');
+    }
+  };
+
+  // Staff promotion dispatcher
+  const handleToggleStaffRole = async (regNo: string, currentRole: UserType['role']) => {
+    const nextRole: UserType['role'] = currentRole === 'user' ? 'admin' : 'user';
+    try {
+      const userRef = doc(db, 'users', regNo.toLowerCase());
+      await updateDoc(userRef, { role: nextRole });
+      showToast(`🛡️ Updated user role: ${regNo} is now an ${nextRole}`);
+    } catch (err: any) {
+      console.error(err);
+      showToast('❌ Role update failed.');
+    }
+  };
+
+  // Report reply dispatcher
+  const handleReplySubmit = (reportId: string) => {
+    const reply = replyDrafts[reportId]?.trim();
+    if (!reply) {
+      showToast("Write a reply response first.");
+      return;
+    }
+    onReplyToReport(reportId, reply);
+    setReplyDrafts(prev => ({ ...prev, [reportId]: '' }));
+    showToast("Reply submitted successfully to student inbox.");
+  };
+
+  // Document selection uploader
   const handleDocumentSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -108,353 +253,314 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         name: file.name,
         dataUrl: ev.target?.result as string
       });
-      showToast(`📎 File prepared: ${file.name}`);
+      showToast(`📎 Handout file selected: ${file.name}`);
     };
     reader.readAsDataURL(file);
   };
 
   const handleUploadSubmit = () => {
     if (!docTitle.trim() || !docFile) {
-      showToast("Please provide a title and select a file to upload.");
+      showToast("Title and file are required to upload academic handouts.");
       return;
     }
     onUploadDocument(docTitle.trim(), docCategory, docFile.name, docFile.dataUrl);
     setDocTitle('');
     setDocFile(null);
-    showToast("Learning materials uploaded successfully!");
+    showToast("Learning resource uploaded and indexed to library.");
   };
 
-  const handleSendAnnouncement = () => {
+  // Announcements and News Dispatcher
+  const handlePublishAnnouncement = () => {
     if (!announcementText.trim()) {
-      showToast("Write a announcement message first.");
+      showToast("Announcement description is empty.");
       return;
     }
     onAddAnnouncement(announcementText.trim());
     setAnnouncementText('');
-    showToast("Announcement published and chimes broadcasted to student bells.");
+    showToast("🎉 Announcement sent. Device chimes active on Student Bells!");
   };
 
-  const handleAddNewsItem = () => {
-    if (!newsInputText.trim()) return;
-    onAddNews(newsInputText.trim());
-    setNewsInputText('');
-    showToast("Pulse ticker updated!");
+  const handlePublishTicker = () => {
+    if (!tickerText.trim()) return;
+    onAddNews(tickerText.trim());
+    setTickerText('');
+    showToast("📰 Pulse marquee ticker updated!");
   };
 
-  const handleReplySubmit = (reportId: string) => {
-    const draft = replyDrafts[reportId]?.trim();
-    if (!draft) {
-      showToast("Please enter an answer before submitting.");
+  // Upload Results Grade Dispatcher
+  const handleUploadResultSubmit = () => {
+    if (!selectedResultStudent) {
+      showToast("Select a student to allocate grades to.");
       return;
     }
-    onReplyToReport(reportId, draft);
-    setReplyDrafts(prev => ({ ...prev, [reportId]: '' }));
-    showToast("Reply posted successfully!");
+    showToast(`🏆 Result uploaded: Allocated Grade '${resultGrade}' for '${resultCourseId}' to ${selectedResultStudent}`);
+    setSelectedResultStudent('');
   };
 
-  const handleResolveResetSubmit = (resetId: string) => {
-    const tempPwd = resetPwdDrafts[resetId]?.trim();
-    if (!tempPwd || tempPwd.length < 4) {
-      showToast("Set a temporary password of at least 4 characters.");
+  // Ledger billing finances uploader
+  const handleFinanceSubmit = () => {
+    if (!selectedFinanceStudent) {
+      showToast("Select a student registry for financial billing.");
       return;
     }
-    onResolveReset(resetId, tempPwd);
-    setResetPwdDrafts(prev => ({ ...prev, [resetId]: '' }));
-    showToast("Temporary password configured. Student can now log in.");
+    const amtNum = parseFloat(financeAmount);
+    if (isNaN(amtNum) || amtNum <= 0) {
+      showToast("Provide a valid numeric billing amount.");
+      return;
+    }
+
+    const newFin = {
+      id: `f-${Date.now()}`,
+      regNo: selectedFinanceStudent,
+      description: financeDescription,
+      amount: amtNum,
+      type: financeType,
+      date: new Date().toISOString().split('T')[0]
+    };
+
+    setFinancials(prev => [newFin, ...prev]);
+    setSelectedFinanceStudent('');
+    setFinanceDescription('Semester Tuition Fees');
+    showToast(`💰 Financial transaction recorded: billed ${amtNum} TZS for ${selectedFinanceStudent}`);
   };
 
-  const handleDirectResetSubmit = () => {
-    if (!directResetReg) {
-      showToast("Select a student to reset.");
+  // Add Department dispatcher
+  const handleAddDept = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDeptId.trim() || !newDeptName.trim()) {
+      showToast("Department code and name are required.");
       return;
     }
-    if (!directResetPwd || directResetPwd.length < 4) {
-      showToast("Choose a temporary password of at least 4 characters.");
+    const newDept = {
+      id: newDeptId.toUpperCase(),
+      name: newDeptName,
+      head: newDeptHead || 'N/A',
+      staffCount: 1
+    };
+    setDepartments(prev => [...prev, newDept]);
+    setNewDeptId('');
+    setNewDeptName('');
+    setNewDeptHead('');
+    showToast(`🏢 Department '${newDept.name}' created.`);
+  };
+
+  // Add Course dispatcher
+  const handleAddCourse = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCourseId.trim() || !newCourseName.trim()) {
+      showToast("Course code and title are required.");
       return;
     }
-    onDirectResetPassword(directResetReg, directResetPwd);
-    setDirectResetReg('');
-    setDirectResetPwd('');
-    showToast("Password updated. Email notifications have been issued.");
+    const newCrs = {
+      id: newCourseId.toUpperCase(),
+      name: newCourseName,
+      dept: newCourseDept,
+      instructor: newCourseInstructor || 'N/A',
+      credits: 3
+    };
+    setCourses(prev => [...prev, newCrs]);
+    setNewCourseId('');
+    setNewCourseName('');
+    setNewCourseInstructor('');
+    showToast(`📚 Course module '${newCrs.name}' indexed to registry.`);
   };
 
   return (
     <div className="space-y-6">
-      {/* Admin Title */}
+      {/* Admin dashboard header bar */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        initial={{ y: -10, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/50 dark:border-slate-800/40 pb-4"
       >
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-extrabold text-slate-900 dark:text-slate-50 font-sans tracking-tight">
-              Control Home
+              Control Workspace
             </h1>
-            <span className={`px-2.5 py-0.5 text-[10px] font-extrabold uppercase rounded-full ${
-              isProg ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-400' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400'
-            }`}>
-              {currentUser.role}
+            <span className={`px-2 py-0.5 text-[9px] font-black uppercase rounded ${accentBg} text-white`}>
+              {currentUser.role} Control
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1">
-            Student Network Security and Log Verification Desk
+            MUHAS Student Registry Security and Academic Deployment Hub
           </p>
         </div>
       </motion.div>
 
-      {/* Stats Counter tiles */}
-      <div className="grid grid-cols-4 gap-2.5">
-        <div className="bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 p-3 rounded-xl text-center">
-          <span className="block text-xl font-black text-slate-700 dark:text-slate-300 font-sans">
+      {/* Metrics bento cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={`p-4 bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 ${radius} shadow-sm`}>
+          <Users className="w-5 h-5 text-sky-500 mb-2" />
+          <span className="block text-2xl font-black text-slate-800 dark:text-slate-200">
             {allUsers.filter(u => u.role === 'user').length}
           </span>
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">Peers</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Registered Students</span>
         </div>
-        <div className="bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 p-3 rounded-xl text-center">
-          <span className="block text-xl font-black text-red-500 font-sans">
-            {reports.filter(r => r.status === 'pending').length}
+
+        <div className={`p-4 bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 ${radius} shadow-sm`}>
+          <UserCheck className="w-5 h-5 text-purple-500 mb-2" />
+          <span className="block text-2xl font-black text-purple-500">
+            {pendingApprovalsList.length}
           </span>
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">Pending</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Pending Approvals</span>
         </div>
-        <div className="bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 p-3 rounded-xl text-center">
-          <span className="block text-xl font-black text-emerald-500 font-sans">
-            {reports.filter(r => r.status === 'answered').length}
+
+        <div className={`p-4 bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 ${radius} shadow-sm`}>
+          <ShieldAlert className="w-5 h-5 text-red-500 mb-2" />
+          <span className="block text-2xl font-black text-red-500">
+            {pendingReportsCount}
           </span>
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">Resolved</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Active Support Logs</span>
         </div>
-        <div className="bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 p-3 rounded-xl text-center">
-          <span className="block text-xl font-black text-blue-500 font-sans">
+
+        <div className={`p-4 bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 ${radius} shadow-sm`}>
+          <BookOpen className="w-5 h-5 text-emerald-500 mb-2" />
+          <span className="block text-2xl font-black text-emerald-500">
             {documents.length}
           </span>
-          <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">Files</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Syllabus Handouts</span>
         </div>
       </div>
 
-      {/* Navigation Tab Bar */}
-      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1">
-        {(['home', 'health', 'academic', 'social', 'students', 'resets', 'materials', 'news', 'admins', 'identity'] as const).map((tab) => {
-          if (tab === 'admins' && !isProg) return null;
-          if (tab === 'identity' && !isProg) return null;
-
-          const active = activeTab === tab;
-          const label = tab === 'home' ? '🏠 Home' :
-                        tab === 'health' ? '🏥 Health' :
-                        tab === 'academic' ? '📚 Academic' :
-                        tab === 'social' ? '🤝 Welfare' :
-                        tab === 'students' ? '👥 Students' :
-                        tab === 'resets' ? '🔑 Password Resets' :
-                        tab === 'materials' ? '📂 Materials' :
-                        tab === 'news' ? '📰 News & Broadcast' :
-                        tab === 'admins' ? '🛡️ Admin Roles' : '⚡ Brand Identity';
-
-          const pendingBadgeCount = tab === 'health' ? healthPending :
-                                    tab === 'academic' ? academicPending :
-                                    tab === 'social' ? socialPending :
-                                    tab === 'resets' ? resetsPending : 0;
-
+      {/* 11 Functional Tabs List */}
+      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-2 border-b border-slate-200/40 dark:border-slate-800/20">
+        {[
+          { key: 'home', label: '🏠 Dashboard' },
+          { key: 'timetable', label: '📅 Class Timetable' },
+          { key: 'approvals', label: '✅ Approvals', count: pendingApprovalsList.length },
+          { key: 'students', label: '👥 Student Base' },
+          { key: 'staff', label: '🛡️ Manage Staff' },
+          { key: 'departments', label: '🏢 Departments' },
+          { key: 'courses', label: '📚 Course Hub' },
+          { key: 'results', label: '🏆 Results' },
+          { key: 'announcements', label: '🔔 Broadcasts' },
+          { key: 'reports', label: '🏥 Desk Tickets', count: pendingReportsCount },
+          { key: 'finances', label: '💰 Ledger accounts' },
+          { key: 'settings', label: '⚙️ Brand Settings' }
+        ].map((tab) => {
+          const active = activeTab === tab.key;
           return (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as any)}
               className={`py-2 px-3.5 text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${radius} ${
                 active
-                  ? tab === 'admins' || tab === 'identity'
-                    ? 'bg-purple-600 text-white shadow-md'
-                    : 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-md'
-                  : 'bg-slate-50 dark:bg-slate-900 text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
+                  ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-md scale-102'
+                  : 'bg-slate-50 hover:bg-slate-100/80 dark:bg-slate-900 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 hover:text-slate-800'
               }`}
             >
-              {label}
-              {pendingBadgeCount > 0 && (
-                <span className="bg-red-500 text-white text-[9px] font-extrabold w-4.5 h-4.5 rounded-full flex items-center justify-center animate-pulse">
-                  {pendingBadgeCount}
+              {tab.label}
+              {tab.count && tab.count > 0 ? (
+                <span className="bg-red-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full flex items-center justify-center animate-pulse">
+                  {tab.count}
                 </span>
-              )}
+              ) : null}
             </button>
           );
         })}
       </div>
 
-      {/* Content tabs viewport */}
+      {/* Control Viewports */}
       <AnimatePresence mode="wait">
+
+        {/* TAB 1: HOME WORKSPACE */}
         {activeTab === 'home' && (
           <motion.div
             key="home"
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -5 }}
-            className="space-y-4"
+            className="space-y-6"
           >
-            <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} flex flex-col items-center text-center space-y-4`}>
-              <div className="w-16 h-16 rounded-full bg-slate-150 dark:bg-slate-800 flex items-center justify-center text-3xl">
-                🛡️
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-800 dark:text-slate-200">
-                  MUHAS Pulse Admin Desk
-                </h3>
-                <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                  You are signed in as an administrator. Navigate through the tabs to process student health notifications, welfare demands, and learning material provisions.
-                </p>
+            {/* Quick Analytics charts (Simulated metrics dashboard) */}
+            <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-200 dark:border-slate-800 shadow space-y-4`}>
+              <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-2">
+                <Activity className="w-4 h-4 text-emerald-500" /> Academic System Analytics
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-medium text-slate-500">
+                <div className="p-4 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200/50 dark:border-slate-800/40">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Gender Distribution</span>
+                  <div className="flex gap-4 items-center mt-2 font-mono font-extrabold">
+                    <span className="text-blue-500">♂️ Male: 48%</span>
+                    <span className="text-pink-500">♀️ Female: 52%</span>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200/50 dark:border-slate-800/40">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Average Student GPA</span>
+                  <span className="block text-xl font-black text-emerald-500 font-mono mt-1">4.08 / 5.0</span>
+                </div>
+
+                <div className="p-4 bg-slate-50 dark:bg-slate-950/40 rounded-xl border border-slate-200/50 dark:border-slate-800/40">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Report Resolution Efficiency</span>
+                  <span className="block text-xl font-black text-sky-500 font-mono mt-1">94.8% Completed</span>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <button
-                onClick={() => setActiveTab('health')}
-                className={`p-4 bg-red-50/50 dark:bg-red-950/10 border border-red-150/40 dark:border-red-900/20 rounded-xl text-left flex items-start gap-3 group transition-all`}
-              >
-                <Heart className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-xs font-black text-slate-800 dark:text-slate-200">Health Cases ({healthPending})</h4>
-                  <p className="text-[10px] text-slate-400 mt-1">Review critical medical alerts from clinical student channels.</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('academic')}
-                className={`p-4 bg-blue-50/50 dark:bg-blue-950/10 border border-blue-150/40 dark:border-blue-900/20 rounded-xl text-left flex items-start gap-3 group transition-all`}
-              >
-                <BookOpen className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-xs font-black text-slate-800 dark:text-slate-200">Academics ({academicPending})</h4>
-                  <p className="text-[10px] text-slate-400 mt-1">Grade concerns, missing notes, and extra help requests.</p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('social')}
-                className={`p-4 bg-amber-50/50 dark:bg-amber-950/10 border border-amber-150/40 dark:border-amber-900/20 rounded-xl text-left flex items-start gap-3 group transition-all`}
-              >
-                <Users className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-xs font-black text-slate-800 dark:text-slate-200">Welfare ({socialPending})</h4>
-                  <p className="text-[10px] text-slate-400 mt-1">Union questions, welfare demands, and housing disputes.</p>
-                </div>
-              </button>
+            {/* Quick Action Welcome Callout */}
+            <div className="bg-slate-50/50 dark:bg-slate-900/10 p-6 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2 text-center max-w-lg mx-auto">
+              <span className="text-2xl">🛡️</span>
+              <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase">MUHAS Administration Console Active</h3>
+              <p className="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed">
+                Welcome back. Use this panel to authorize registrations, manage departments and curriculums, and input grades for MBBS clinical students.
+              </p>
             </div>
           </motion.div>
         )}
 
-        {(['health', 'academic', 'social'] as const).includes(activeTab as any) && (
+        {/* TAB 2: REGISTRATION APPROVALS */}
+        {activeTab === 'approvals' && (
           <motion.div
-            key="reports-review"
+            key="approvals"
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -5 }}
-            className="space-y-4"
+            className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-200 dark:border-slate-800 shadow space-y-4`}
           >
-            <div className="flex justify-between items-center bg-slate-50/40 dark:bg-slate-900/20 p-2 rounded-xl">
-              <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
-                Listing Sector: {activeTab} logs
-              </span>
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h2 className="text-sm font-extrabold text-slate-900 dark:text-slate-50 uppercase tracking-wider flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-emerald-500" /> Registrations Pending Approval ({pendingApprovalsList.length})
+              </h2>
             </div>
 
-            {reports.filter(r => r.sector === activeTab).length === 0 ? (
-              <div className={`p-10 ${getGlassmorphismClass(config.glassmorphism)} ${radius} text-center text-slate-400`}>
-                <div className="text-xl mx-auto mb-3">📭</div>
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">No logs reported in this sector</h4>
-                <p className="text-[10px] text-slate-500 mt-1">Logs from student departments will index here instantly once submitted.</p>
+            {pendingApprovalsList.length === 0 ? (
+              <div className="p-10 text-center text-slate-400 text-xs">
+                🎉 Perfect. All registered student profiles have been approved and authorized!
               </div>
             ) : (
-              reports.filter(r => r.sector === activeTab).slice().reverse().map((report) => {
-                const isAnswered = report.status === 'answered';
-                const student = allUsers.find(u => u.regNo === report.regNo);
-                return (
-                  <motion.div
-                    key={report.id}
-                    layout
-                    className={`p-4 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-150/40 dark:border-slate-800/40 space-y-3`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                          {report.name}
-                          <span className="text-[9px] font-mono text-slate-400 font-bold bg-slate-50 dark:bg-slate-950 px-1.5 py-0.5 rounded border border-slate-200/50 dark:border-slate-800">
-                            {report.regNo}
-                          </span>
-                        </h4>
-                        <p className="text-[9px] text-slate-400 dark:text-slate-500 font-mono mt-1">
-                          {student?.course} · Submitted {report.time}
-                        </p>
-                      </div>
-
-                      <span className={`px-2 py-0.5 text-[9px] font-black uppercase rounded ${
-                        isAnswered ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400'
-                      }`}>
-                        {report.status}
-                      </span>
+              <div className="space-y-3.5">
+                {pendingApprovalsList.map((st) => (
+                  <div key={st.regNo} className="p-4 bg-slate-50/50 dark:bg-slate-900/30 border border-slate-200/40 dark:border-slate-800/40 rounded-xl flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">{st.firstName} {st.middleName} {st.lastName}</h3>
+                      <p className="text-[10px] text-slate-400 mt-1 font-mono">{st.course} · {st.regNo} · Email: {st.email}</p>
                     </div>
 
-                    <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans pr-1">
-                      {report.text}
-                    </p>
-
-                    {report.attachmentName && (
-                      <div className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-slate-950/50 px-2.5 py-1 text-[10px] font-mono text-slate-500 dark:text-slate-400 rounded-md border border-slate-200/40 dark:border-slate-800/50">
-                        📎 {report.attachmentName}
-                      </div>
-                    )}
-
-                    {/* Reach out anchors */}
-                    {student && (
-                      <div className="flex items-center gap-2 pt-1">
-                        <a
-                          href={`https://wa.me/${student.countryCode.replace('+', '')}${student.phone}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-2.5 py-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100/50 dark:bg-emerald-950/20 rounded-md border border-emerald-150/50 dark:border-emerald-900/30 flex items-center gap-1"
-                        >
-                          <MessageSquare className="w-3 h-3" /> WhatsApp Student
-                        </a>
-                        <a
-                          href={`mailto:${student.email}`}
-                          className="px-2.5 py-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100/50 dark:bg-blue-950/20 rounded-md border border-blue-150/50 dark:border-blue-900/30 flex items-center gap-1"
-                        >
-                          <Mail className="w-3 h-3" /> Email Address
-                        </a>
-                      </div>
-                    )}
-
-                    {/* Actions block */}
-                    {isAnswered ? (
-                      <div className="bg-emerald-50/50 dark:bg-emerald-950/10 p-3 rounded-xl border border-emerald-150/40 dark:border-emerald-900/20 space-y-1">
-                        <div className="flex items-center justify-between text-[9px] text-emerald-600 dark:text-emerald-400 font-black uppercase">
-                          <span>✅ Replied by administrator</span>
-                          <span>{report.replyTime}</span>
-                        </div>
-                        <p className="text-xs text-slate-700 dark:text-slate-300 font-sans leading-relaxed">
-                          {report.reply}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="border-t border-slate-100 dark:border-slate-800/50 pt-3 flex gap-2">
-                        <input
-                          type="text"
-                          value={replyDrafts[report.id] || ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setReplyDrafts(prev => ({ ...prev, [report.id]: val }));
-                          }}
-                          placeholder={`Write an answer response to ${report.name.split(' ')[0]}...`}
-                          className={`flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius} focus:outline-none`}
-                        />
-                        <button
-                          onClick={() => handleReplySubmit(report.id)}
-                          className={`px-4 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-slate-100 dark:text-slate-900 hover:shadow-md ${radius} shrink-0`}
-                        >
-                          Send Reply
-                        </button>
-                      </div>
-                    )}
-                  </motion.div>
-                );
-              })
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleApproveRegistration(st.regNo)}
+                        className={`px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold ${radius} transition-all flex items-center gap-1 shadow-sm`}
+                      >
+                        <Check className="w-3.5 h-3.5" /> Approve
+                      </button>
+                      <button
+                        onClick={() => handleRejectRegistration(st.regNo)}
+                        className={`px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-[11px] font-extrabold ${radius} transition-all flex items-center gap-1 shadow-sm`}
+                      >
+                        <X className="w-3.5 h-3.5" /> Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </motion.div>
         )}
 
+        {/* TAB 3: STUDENT MANAGER */}
         {activeTab === 'students' && (
           <motion.div
             key="students"
@@ -463,7 +569,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             exit={{ opacity: 0, y: -5 }}
             className="space-y-4"
           >
-            {/* Search bar */}
             <div className="relative">
               <Search className="absolute left-3 top-3.5 w-4 h-4 text-slate-400" />
               <input
@@ -475,106 +580,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               />
             </div>
 
-            {/* List cards */}
             <div className="space-y-3.5">
-              {[...allUsers]
-                .sort((a, b) => {
-                  const roleOrder = { programmer: 1, admin: 2, user: 3 };
-                  return roleOrder[a.role] - roleOrder[b.role];
-                })
+              {allUsers
                 .filter(u => {
-                  const query = searchQuery.toLowerCase();
-                  const fName = u.firstName || '';
-                  const lName = u.lastName || '';
-                  const reg = u.regNo || '';
-                  const crs = u.course || '';
-                  return fName.toLowerCase().includes(query) ||
-                         lName.toLowerCase().includes(query) ||
-                         reg.toLowerCase().includes(query) ||
-                         crs.toLowerCase().includes(query);
+                  const q = searchQuery.toLowerCase();
+                  return u.firstName.toLowerCase().includes(q) || u.lastName.toLowerCase().includes(q) || u.regNo.toLowerCase().includes(q);
                 })
-                .map((student) => (
-                  <div
-                    key={student.regNo}
-                    className={`p-4 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-150/40 dark:border-slate-800/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${accentGradient} text-white font-extrabold flex items-center justify-center shadow-sm overflow-hidden`}>
-                        {student.photo ? (
-                          <img src={student.photo} alt="P" className="w-full h-full object-cover" />
-                        ) : (
-                          student.firstName[0].toUpperCase()
+                .map((st) => (
+                  <div key={st.regNo} className={`p-4 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-150/40 dark:border-slate-800/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5 flex-wrap">
+                        {st.firstName} {st.middleName} {st.lastName}
+                        {st.approved === false && (
+                          <span className="bg-red-500 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded">Pending Approval</span>
                         )}
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5 flex-wrap">
-                          {student.firstName} {student.middleName} {student.lastName}
-                          <span className={`text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded-full ${
-                            student.role === 'programmer' ? 'bg-purple-100 dark:bg-purple-950/40 text-purple-800 dark:text-purple-400' :
-                            student.role === 'admin' ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400' :
-                            'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                          }`}>
-                            {student.role}
-                          </span>
-                          {student.chatAlias && (
-                            <span className="text-[9px] font-bold text-teal-500 font-mono">
-                              @{student.chatAlias}
-                            </span>
-                          )}
-                        </h4>
-                        <p className="text-[10px] text-slate-400 mt-1 font-mono">
-                          {student.course} · {student.regNo} · Gender: {student.gender}
-                        </p>
-                      </div>
+                      </h4>
+                      <p className="text-[10px] text-slate-400 font-mono mt-1">{st.course} · ID: {st.regNo} · Tel: +{st.countryCode} {st.phone}</p>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={`https://wa.me/${student.countryCode.replace('+', '')}${student.phone}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-500 rounded-full hover:bg-emerald-100/50 transition-colors"
-                        title="WhatsApp"
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleToggleStaffRole(st.regNo, st.role)}
+                        className={`px-2.5 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-300 text-[10px] font-bold ${radius}`}
                       >
-                        <MessageSquare className="w-4 h-4" />
-                      </a>
-                      <a
-                        href={`mailto:${student.email}`}
-                        className="p-2 bg-blue-50 dark:bg-blue-950/20 text-blue-500 rounded-full hover:bg-blue-100/50 transition-colors"
-                        title="Email"
-                      >
-                        <Mail className="w-4 h-4" />
-                      </a>
+                        {st.role === 'user' ? 'Promote Admin' : 'Demote Student'}
+                      </button>
 
-                      {isProg && student.regNo !== currentUser.regNo && (
-                        confirmingDeleteRegNo === student.regNo ? (
-                          <div className="flex items-center gap-1 bg-red-50 dark:bg-red-950/20 px-2 py-1 rounded-lg border border-red-100 dark:border-red-900/40">
-                            <button
-                              onClick={() => {
-                                onRemoveUser(student.regNo);
-                                setConfirmingDeleteRegNo(null);
-                              }}
-                              className="px-1.5 py-0.5 text-[9px] font-black uppercase text-white bg-red-500 hover:bg-red-600 rounded transition-colors"
-                            >
-                              Confirm
-                            </button>
-                            <button
-                              onClick={() => setConfirmingDeleteRegNo(null)}
-                              className="px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setConfirmingDeleteRegNo(student.regNo)}
-                            className="p-2 bg-red-50 dark:bg-red-950/20 text-red-500 rounded-full hover:bg-red-100/50 transition-colors"
-                            title="Remove User"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )
-                      )}
+                      <button
+                        onClick={() => {
+                          onRemoveUser(st.regNo);
+                          showToast(`❌ Removed student node from registry: ${st.regNo}`);
+                        }}
+                        className="p-1.5 bg-red-50 dark:bg-red-950/20 text-red-500 rounded hover:bg-red-100"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -582,540 +622,845 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </motion.div>
         )}
 
-        {activeTab === 'resets' && (
+        {/* TAB 4: STAFF DIRECTORY */}
+        {activeTab === 'staff' && (
           <motion.div
-            key="resets"
+            key="staff"
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -5 }}
-            className="space-y-6"
+            className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-200 dark:border-slate-800 shadow space-y-4`}
           >
-            {/* Reset request queue list */}
-            <div>
-              <h3 className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">
-                Password Reset Requests
-              </h3>
-
-              {passwordResets.length === 0 ? (
-                <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} text-center text-slate-400`}>
-                  <div className="text-lg mb-2">🔑</div>
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">No Pending Reset Requests</h4>
-                  <p className="text-[10px] text-slate-500 mt-1">Once students submit request flags, they will queue here.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {passwordResets.slice().reverse().map((reset) => {
-                    const isResolved = reset.status === 'resolved';
-                    const student = allUsers.find(u => u.regNo === reset.regNo);
-                    return (
-                      <div
-                        key={reset.id}
-                        className={`p-4 bg-white dark:bg-slate-900 border border-slate-150/40 dark:border-slate-800/40 ${radius} space-y-3`}
-                      >
-                        <div className="flex justify-between items-center text-[10px] font-bold text-slate-400">
-                          <span className="flex items-center gap-1.5 font-mono">
-                            {reset.name} ({reset.regNo})
-                          </span>
-                          <span className={`px-2 py-0.5 rounded text-[8px] uppercase ${
-                            isResolved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {reset.status}
-                          </span>
-                        </div>
-
-                        {student && (
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            Verified Registered Email: <span className="font-semibold text-slate-700 dark:text-slate-300">{reset.email}</span>
-                          </div>
-                        )}
-
-                        {isResolved ? (
-                          <div className="text-[10px] text-emerald-500 font-bold flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Resolved password reset at {reset.resolvedTime}
-                          </div>
-                        ) : (
-                          <div className="flex gap-2 border-t border-slate-100 dark:border-slate-800/55 pt-3">
-                            <div className="relative flex-1">
-                              <input
-                                type={showResetDraftPwd[reset.id] ? 'text' : 'password'}
-                                value={resetPwdDrafts[reset.id] || ''}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setResetPwdDrafts(prev => ({ ...prev, [reset.id]: val }));
-                                }}
-                                placeholder="Assign temporary login password..."
-                                className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius} focus:outline-none`}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const cur = !!showResetDraftPwd[reset.id];
-                                  setShowResetDraftPwd(prev => ({ ...prev, [reset.id]: !cur }));
-                                }}
-                                className="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600"
-                              >
-                                {showResetDraftPwd[reset.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                              </button>
-                            </div>
-                            <button
-                              onClick={() => handleResolveResetSubmit(reset.id)}
-                              className={`px-4 py-2 text-xs font-bold text-white ${accentBg} hover:shadow-md ${radius} shrink-0`}
-                            >
-                              Resolve Request
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h2 className="text-sm font-extrabold text-slate-900 dark:text-slate-50 uppercase tracking-wider flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-purple-500" /> MUHAS Administrative Staff Directory
+              </h2>
             </div>
 
-            {/* Direct force reset */}
-            <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} space-y-4`}>
-              <h3 className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                Force Direct Password Override
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Select Student</label>
-                  <select
-                    value={directResetReg}
-                    onChange={(e) => setDirectResetReg(e.target.value)}
-                    className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius} focus:outline-none`}
-                  >
-                    <option value="">Choose registered student...</option>
-                    {allUsers.filter(u => u.role === 'user').map(u => (
-                      <option key={u.regNo} value={u.regNo}>{u.firstName} {u.lastName} ({u.regNo})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">New Temporary Password</label>
-                  <div className="relative">
-                    <input
-                      type={showDirectPwd ? 'text' : 'password'}
-                      value={directResetPwd}
-                      onChange={(e) => setDirectResetPwd(e.target.value)}
-                      placeholder="Assign secure string override..."
-                      className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius} focus:outline-none`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowDirectPwd(!showDirectPwd)}
-                      className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
-                    >
-                      {showDirectPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <button
-                  onClick={handleDirectResetSubmit}
-                  className={`px-5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 ${radius}`}
-                >
-                  Override Student Password
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {activeTab === 'materials' && (
-          <motion.div
-            key="materials"
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            className="space-y-6"
-          >
-            {/* Upload form */}
-            <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} space-y-4`}>
-              <h3 className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800/60 pb-2">
-                Upload New Educational Material
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Document Title</label>
-                  <input
-                    type="text"
-                    value={docTitle}
-                    onChange={(e) => setDocTitle(e.target.value)}
-                    placeholder="e.g. Anatomy Lecture Notes — Week 3"
-                    className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2.5 text-xs ${radius} focus:outline-none`}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Course category tag</label>
-                  <select
-                    value={docCategory}
-                    onChange={(e) => setDocCategory(e.target.value)}
-                    className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2.5 text-xs ${radius} focus:outline-none`}
-                  >
-                    {DOCUMENT_CATEGORIES.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="file"
-                    id="docMaterialFileBtn"
-                    onChange={handleDocumentSelect}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => document.getElementById('docMaterialFileBtn')?.click()}
-                    className={`px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold ${radius}`}
-                  >
-                    Select File Attachment
-                  </button>
-                  {docFile && (
-                    <span className="text-[10px] font-mono text-emerald-500 max-w-[150px] truncate font-medium">
-                      📎 {docFile.name}
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  onClick={handleUploadSubmit}
-                  className={`px-5 py-2 text-xs font-bold text-white bg-gradient-to-r ${accentGradient} ${radius} hover:shadow-md transition-all active:scale-98`}
-                >
-                  Publish Material
-                </button>
-              </div>
-            </div>
-
-            {/* Uploaded documents queue */}
-            <div>
-              <h3 className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">
-                Published Materials List
-              </h3>
-
-              {documents.length === 0 ? (
-                <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} text-center text-slate-400`}>
-                  <div className="text-lg mb-2">📂</div>
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">No Materials Uploaded</h4>
-                  <p className="text-[10px] text-slate-500 mt-1">Once learning modules are published, they will list here.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {documents.slice().reverse().map((doc) => (
-                    <div
-                      key={doc.id}
-                      className={`p-4 bg-white dark:bg-slate-900 border border-slate-150/40 dark:border-slate-800/40 ${radius} flex items-center justify-between gap-4`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-500 flex items-center justify-center shrink-0 text-lg">
-                          📄
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate pr-2">
-                            {doc.title}
-                          </h4>
-                          <p className="text-[9px] text-slate-400 mt-0.5 truncate">
-                            {doc.category} · {doc.fileName} · Uploaded by {doc.uploadedBy}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <a
-                          href={doc.dataUrl}
-                          download={doc.fileName}
-                          className="p-1.5 bg-slate-50 dark:bg-slate-950 text-slate-400 hover:text-slate-600 rounded-full"
-                          title="Download File"
-                        >
-                          <Download className="w-4 h-4" />
-                        </a>
-                        <button
-                          onClick={() => onDeleteDocument(doc.id)}
-                          className="p-1.5 bg-red-50/50 hover:bg-red-100/60 text-red-500 rounded-full"
-                          title="Delete File"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+            <div className="space-y-3">
+              {allUsers
+                .filter(u => u.role === 'admin' || u.role === 'programmer')
+                .map((staff) => (
+                  <div key={staff.regNo} className="p-4 bg-slate-50/50 dark:bg-slate-900/30 border border-slate-200/40 dark:border-slate-800/40 rounded-xl flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-850 dark:text-slate-200">{staff.firstName} {staff.lastName}</h3>
+                      <p className="text-[10px] text-slate-400 mt-0.5 font-mono">Role: {staff.role} · Email: {staff.email}</p>
                     </div>
-                  ))}
-                </div>
-              )}
+
+                    <span className="text-[10px] bg-purple-50 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded font-black uppercase">
+                      Admin Staff
+                    </span>
+                  </div>
+                ))}
             </div>
           </motion.div>
         )}
 
-        {activeTab === 'news' && (
+        {/* TAB 5: DEPARTMENTS EDITOR */}
+        {activeTab === 'departments' && (
           <motion.div
-            key="news"
+            key="departments"
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -5 }}
-            className="space-y-6"
+            className="space-y-4"
           >
-            {/* News Ticker editor */}
-            <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} space-y-4`}>
-              <h3 className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                Edit Pulse crawling Ticker News
-              </h3>
+            <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-200 dark:border-slate-800 shadow space-y-4`}>
+              <h3 className="text-sm font-black uppercase text-slate-400 tracking-wider">Configure University Departments</h3>
 
-              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                {config.siteName ? (
-                  // Map in-memory ticker news list from state (synchronized globally in App.tsx)
-                  allNewsItems(onRemoveNews)
-                ) : null}
-              </div>
-
-              <div className="flex gap-2 border-t border-slate-100 dark:border-slate-800/60 pt-3">
+              <form onSubmit={handleAddDept} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <input
                   type="text"
-                  value={newsInputText}
-                  onChange={(e) => setNewsInputText(e.target.value)}
-                  placeholder="Drop a new ticker banner headline..."
-                  className={`flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs ${radius} focus:outline-none`}
+                  value={newDeptId}
+                  onChange={(e) => setNewDeptId(e.target.value)}
+                  placeholder="ID (e.g. PHAR)"
+                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs rounded focus:outline-none"
                 />
-                <button
-                  onClick={handleAddNewsItem}
-                  className={`px-4 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-slate-100 dark:text-slate-900 ${radius}`}
-                >
-                  Add Headline
+                <input
+                  type="text"
+                  value={newDeptName}
+                  onChange={(e) => setNewDeptName(e.target.value)}
+                  placeholder="Name (e.g. Pharmacology)"
+                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs rounded focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={newDeptHead}
+                  onChange={(e) => setNewDeptHead(e.target.value)}
+                  placeholder="Head Coordinator"
+                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs rounded focus:outline-none"
+                />
+                <button type="submit" className={`col-span-1 sm:col-span-3 py-2 bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-extrabold text-xs ${radius}`}>
+                  Add Department Division
                 </button>
+              </form>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                {departments.map(dept => (
+                  <div key={dept.id} className="p-3 bg-slate-50/50 dark:bg-slate-900/30 rounded-xl border border-slate-200/40 dark:border-slate-800/40">
+                    <span className="text-[9px] font-mono font-bold text-sky-500">{dept.id}</span>
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1">{dept.name}</h4>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Head: {dept.head} · Staff: {dept.staffCount}</p>
+                  </div>
+                ))}
               </div>
             </div>
+          </motion.div>
+        )}
 
-            {/* Global Broadcast announcements */}
-            <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} space-y-3.5`}>
-              <h3 className="text-xs font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                Broadcast Global Announcement Alert
-              </h3>
-              <p className="text-[10px] text-slate-400">
-                Pushes a push announcement badge into every registered student's bell icon. Broadcast triggers a real-time sound effect for active lobbies.
-              </p>
+        {/* TAB 6: COURSE HUB MAPPER */}
+        {activeTab === 'courses' && (
+          <motion.div
+            key="courses"
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            className="space-y-4"
+          >
+            <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-200 dark:border-slate-800 shadow space-y-4`}>
+              <h3 className="text-sm font-black uppercase text-slate-400 tracking-wider">Manage Academic Course Catalog</h3>
 
+              <form onSubmit={handleAddCourse} className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <input
+                  type="text"
+                  value={newCourseId}
+                  onChange={(e) => setNewCourseId(e.target.value)}
+                  placeholder="Code (e.g. PM204)"
+                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs rounded focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={newCourseName}
+                  onChange={(e) => setNewCourseName(e.target.value)}
+                  placeholder="Course Title"
+                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs rounded focus:outline-none"
+                />
+                <select
+                  value={newCourseDept}
+                  onChange={(e) => setNewCourseDept(e.target.value)}
+                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs rounded focus:outline-none"
+                >
+                  {departments.map(d => (
+                    <option key={d.id} value={d.id}>{d.id}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={newCourseInstructor}
+                  onChange={(e) => setNewCourseInstructor(e.target.value)}
+                  placeholder="Lecturer"
+                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 text-xs rounded focus:outline-none"
+                />
+                <button type="submit" className={`col-span-1 sm:col-span-4 py-2 bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-extrabold text-xs ${radius}`}>
+                  Register Syllabus Module
+                </button>
+              </form>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                {courses.map(crs => (
+                  <div key={crs.id} className="p-3.5 bg-slate-50/50 dark:bg-slate-900/30 rounded-xl border border-slate-200/40 dark:border-slate-800/40">
+                    <span className="text-[9px] font-mono font-bold text-sky-500 bg-sky-50 dark:bg-sky-950/40 px-1.5 py-0.5 rounded">{crs.id}</span>
+                    <h4 className="text-xs font-bold text-slate-850 dark:text-slate-200 mt-2">{crs.name}</h4>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Instructor: {crs.instructor} · Credits: {crs.credits} Unit</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* TAB 7: UPLOAD RESULTS */}
+        {activeTab === 'results' && (
+          <motion.div
+            key="results"
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-200 dark:border-slate-800 shadow space-y-4`}
+          >
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h2 className="text-sm font-extrabold text-slate-900 dark:text-slate-50 uppercase tracking-wider flex items-center gap-2">
+                <Award className="w-4 h-4 text-emerald-500" /> Student Grade & Marksheet Uploader
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <select
+                value={selectedResultStudent}
+                onChange={(e) => setSelectedResultStudent(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl focus:outline-none"
+              >
+                <option value="">-- Choose Student Registry --</option>
+                {allUsers.filter(u => u.role === 'user').map(st => (
+                  <option key={st.regNo} value={st.regNo}>{st.firstName} {st.lastName} ({st.regNo})</option>
+                ))}
+              </select>
+
+              <select
+                value={resultCourseId}
+                onChange={(e) => setResultCourseId(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl focus:outline-none"
+              >
+                {courses.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.id})</option>
+                ))}
+              </select>
+
+              <select
+                value={resultGrade}
+                onChange={(e) => setResultGrade(e.target.value)}
+                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2.5 text-xs rounded-xl focus:outline-none"
+              >
+                <option value="A">Grade A (5.0)</option>
+                <option value="B+">Grade B+ (4.0)</option>
+                <option value="B">Grade B (3.0)</option>
+                <option value="C">Grade C (2.0)</option>
+                <option value="D">Grade D (1.0)</option>
+              </select>
+
+              <button
+                onClick={handleUploadResultSubmit}
+                className={`col-span-1 sm:col-span-3 py-2 bg-slate-950 text-white dark:bg-white dark:text-slate-950 text-xs font-black ${radius}`}
+              >
+                Publish Grade Score
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* TAB 8: ANNOUNCEMENTS & TICKERS */}
+        {activeTab === 'announcements' && (
+          <motion.div
+            key="announcements"
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            className="grid grid-cols-1 md:grid-cols-2 gap-6"
+          >
+            {/* Poster announcement */}
+            <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-200 dark:border-slate-800 shadow space-y-4`}>
+              <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Publish Official Student Announcement</h3>
               <textarea
                 value={announcementText}
                 onChange={(e) => setAnnouncementText(e.target.value)}
-                rows={3}
-                placeholder="Type global broadcast announcement details here..."
-                className={`w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2.5 text-xs ${radius} focus:outline-none`}
+                rows={4}
+                placeholder="Write message to send out directly to peer notification bells..."
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 p-3 text-xs focus:outline-none"
               />
+              <button
+                onClick={handlePublishAnnouncement}
+                className={`w-full py-2 bg-sky-600 text-white text-xs font-extrabold ${radius}`}
+              >
+                Publish & Play Chime
+              </button>
+            </div>
 
-              <div className="flex justify-end pt-1">
+            {/* Marquee News ticker */}
+            <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-200 dark:border-slate-800 shadow space-y-4`}>
+              <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">Post to Scrolling Marquee Ticker</h3>
+              <input
+                type="text"
+                value={tickerText}
+                onChange={(e) => setTickerText(e.target.value)}
+                placeholder="e.g. Supplementary registrations close this Friday at 16:00"
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 p-2.5 text-xs focus:outline-none"
+              />
+              <button
+                onClick={handlePublishTicker}
+                className={`w-full py-2 bg-slate-950 text-white dark:bg-white dark:text-slate-950 text-xs font-extrabold ${radius}`}
+              >
+                Update Pulse Ticker
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* TAB 9: LOG DESK TICKETS */}
+        {activeTab === 'reports' && (
+          <motion.div
+            key="reports"
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            className="space-y-4"
+          >
+            {/* Sector switcher */}
+            <div className="flex gap-2">
+              {(['health', 'academic', 'social'] as const).map((sec) => (
                 <button
-                  onClick={handleSendAnnouncement}
-                  className={`px-5 py-2.5 text-xs font-bold text-white bg-gradient-to-r ${accentGradient} hover:shadow-md ${radius} flex items-center gap-1.5`}
+                  key={sec}
+                  onClick={() => setSelectedReportSector(sec)}
+                  className={`flex-1 py-1.5 text-xs font-extrabold rounded-lg capitalize border ${
+                    selectedReportSector === sec
+                      ? 'bg-slate-950 border-slate-950 text-white dark:bg-white dark:text-slate-950'
+                      : 'bg-slate-50 border-slate-200 text-slate-500'
+                  }`}
                 >
-                  Publish Announcement
+                  {sec} Support
+                </button>
+              ))}
+            </div>
+
+            {/* Reports listing */}
+            <div className="space-y-3">
+              {reports.filter(r => r.sector === selectedReportSector).length === 0 ? (
+                <div className="p-10 text-center text-slate-400 text-xs bg-slate-50/40 rounded-xl border border-slate-200/50">
+                  No pending logs in this sector. Clear desk!
+                </div>
+              ) : (
+                reports.filter(r => r.sector === selectedReportSector).slice().reverse().map((report) => {
+                  const isAnswered = report.status === 'answered';
+                  return (
+                    <div key={report.id} className={`p-4 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/40 rounded-xl space-y-3 shadow-sm`}>
+                      <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 font-bold uppercase">
+                        <span>{report.name} ({report.regNo}) · {report.time}</span>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                          isAnswered ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {report.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">{report.text}</p>
+                      
+                      {isAnswered ? (
+                        <div className="bg-emerald-50/50 p-2.5 rounded text-xs text-slate-600 border border-emerald-100">
+                          <span className="block font-bold text-emerald-600 uppercase text-[9px] mb-1">My Response:</span>
+                          {report.reply}
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={replyDrafts[report.id] || ''}
+                            onChange={(e) => setReplyDrafts(prev => ({ ...prev, [report.id]: e.target.value }))}
+                            placeholder="Type a support response answer..."
+                            className="flex-1 bg-slate-50 border border-slate-200 text-xs p-2 rounded focus:outline-none"
+                          />
+                          <button
+                            onClick={() => handleReplySubmit(report.id)}
+                            className={`px-3 py-1 bg-slate-950 text-white rounded text-xs font-bold`}
+                          >
+                            Reply
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* TAB 10: MANAGE FINANCES (INVOICING AND PAYMENTS) */}
+        {activeTab === 'finances' && (
+          <motion.div
+            key="finances"
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            className="space-y-4"
+          >
+            <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-200 dark:border-slate-800 shadow space-y-4`}>
+              <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex items-center gap-2">
+                <Landmark className="w-5 h-5 text-emerald-500" />
+                <h2 className="text-sm font-extrabold text-slate-900 dark:text-slate-50 uppercase tracking-wider">
+                  Student Finance Ledgers & Invoicing Desk
+                </h2>
+              </div>
+
+              {/* Financial Billing form */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <select
+                  value={selectedFinanceStudent}
+                  onChange={(e) => setSelectedFinanceStudent(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 p-2.5 text-xs rounded-xl focus:outline-none"
+                >
+                  <option value="">-- Billed Student --</option>
+                  {allUsers.filter(u => u.role === 'user').map(st => (
+                    <option key={st.regNo} value={st.regNo}>{st.firstName} {st.lastName} ({st.regNo})</option>
+                  ))}
+                </select>
+
+                <input
+                  type="text"
+                  value={financeDescription}
+                  onChange={(e) => setFinanceDescription(e.target.value)}
+                  placeholder="Billing Description (e.g. Tuition Fee)"
+                  className="bg-slate-50 border border-slate-200 p-2 text-xs rounded-xl focus:outline-none"
+                />
+
+                <input
+                  type="number"
+                  value={financeAmount}
+                  onChange={(e) => setFinanceAmount(e.target.value)}
+                  placeholder="Amount in TZS"
+                  className="bg-slate-50 border border-slate-200 p-2 text-xs rounded-xl focus:outline-none"
+                />
+
+                <select
+                  value={financeType}
+                  onChange={(e) => setFinanceType(e.target.value as any)}
+                  className="bg-slate-50 border border-slate-200 p-2 text-xs rounded-xl focus:outline-none"
+                >
+                  <option value="invoice">Post Invoice Billing</option>
+                  <option value="payment">Post Payment Payment</option>
+                </select>
+
+                <button
+                  onClick={handleFinanceSubmit}
+                  className={`col-span-1 sm:col-span-4 py-2 bg-emerald-600 text-white text-xs font-black ${radius}`}
+                >
+                  Submit Financial Entry
                 </button>
               </div>
-            </div>
-          </motion.div>
-        )}
 
-        {/* PROGRAMMER ONLY: manage staff roles */}
-        {activeTab === 'admins' && isProg && (
-          <motion.div
-            key="admins"
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            className="space-y-4"
-          >
-            <h3 className="text-xs font-extrabold text-purple-400 uppercase tracking-widest">
-              Staff Privileges & Governance
-            </h3>
-
-            <div className="space-y-3.5">
-              {[...allUsers]
-                .sort((a, b) => {
-                  const roleOrder = { programmer: 1, admin: 2, user: 3 };
-                  return roleOrder[a.role] - roleOrder[b.role];
-                })
-                .map((u) => {
-                  const isCurrent = u.regNo === currentUser.regNo;
-                return (
-                  <div
-                    key={u.regNo}
-                    className={`p-4 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-150/40 dark:border-slate-800/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}
-                  >
-                    <div>
-                      <h4 className="text-xs font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                        {u.firstName} {u.lastName}
-                        <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
-                          u.role === 'programmer' ? 'bg-purple-100 text-purple-800' : u.role === 'admin' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'
-                        }`}>
-                          {u.role}
-                        </span>
-                      </h4>
-                      <p className="text-[10px] text-slate-400 mt-1 font-mono">
-                        {u.course} · Registry No. {u.regNo}
-                      </p>
-                    </div>
-
-                    {!isCurrent && (
-                      <div className="flex gap-2">
-                        {u.role !== 'programmer' && (
-                          <button
-                            onClick={() => {
-                              onUpdateUserRole(u.regNo, 'programmer');
-                              showToast(`Elevated ${u.firstName} to System Programmer.`);
-                            }}
-                            className={`px-2.5 py-1 text-[10px] font-bold text-purple-600 bg-purple-50 dark:bg-purple-950/20 rounded-md border border-purple-150`}
-                          >
-                            Make Programmer
-                          </button>
-                        )}
-                        {u.role !== 'admin' && (
-                          <button
-                            onClick={() => {
-                              onUpdateUserRole(u.regNo, 'admin');
-                              showToast(`Elevated ${u.firstName} to Sector Admin.`);
-                            }}
-                            className={`px-2.5 py-1 text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/20 rounded-md border border-amber-150`}
-                          >
-                            Make Admin
-                          </button>
-                        )}
-                        {u.role !== 'user' && (
-                          <button
-                            onClick={() => {
-                              onUpdateUserRole(u.regNo, 'user');
-                              showToast(`Demoted ${u.firstName} to student peer.`);
-                            }}
-                            className={`px-2.5 py-1 text-[10px] font-bold text-slate-600 bg-slate-50 rounded-md border border-slate-200`}
-                          >
-                            Revoke Staff Access
-                          </button>
-                        )}
-
-                        {confirmingDeleteRegNo === u.regNo ? (
-                          <div className="flex items-center gap-1 bg-red-50 dark:bg-red-950/20 px-2 py-0.5 rounded-md border border-red-150">
-                            <button
-                              onClick={() => {
-                                onRemoveUser(u.regNo);
-                                setConfirmingDeleteRegNo(null);
-                              }}
-                              className="px-1.5 py-0.5 text-[9px] font-black uppercase text-white bg-red-600 rounded"
-                            >
-                              Confirm
-                            </button>
-                            <button
-                              onClick={() => setConfirmingDeleteRegNo(null)}
-                              className="px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-500 hover:text-slate-700 dark:text-slate-400"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setConfirmingDeleteRegNo(u.regNo)}
-                            className="px-2.5 py-1 text-[10px] font-bold text-red-600 bg-red-50 dark:bg-red-950/20 rounded-md border border-red-150 hover:bg-red-100/50"
-                          >
-                            Remove User
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-
-        {/* PROGRAMMER ONLY: Brand parameters overview */}
-        {activeTab === 'identity' && isProg && (
-          <motion.div
-            key="identity"
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            className="space-y-4"
-          >
-            <div className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} space-y-4`}>
-              <h3 className="text-xs font-extrabold text-purple-400 uppercase tracking-widest border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center gap-2">
-                <Sliders className="w-4 h-4" /> System Governance Parameters
-              </h3>
-
-              <div className="space-y-4 text-xs font-medium">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div>
-                    <div className="font-bold text-slate-800 dark:text-slate-200">Site Branding Title</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Title visible on sign-in, topbar, and footers.</div>
-                  </div>
-                  <input
-                    type="text"
-                    value={config.siteName}
-                    onChange={(e) => onUpdateConfig({ siteName: e.target.value })}
-                    className={`bg-slate-50 dark:bg-slate-950 p-2 text-xs border border-slate-200 dark:border-slate-800 ${radius} focus:outline-none w-1/2`}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div>
-                    <div className="font-bold text-slate-800 dark:text-slate-200">Allow Multiple Programmers</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Toggle whether multiple user nodes can acquire root developer keys.</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={config.allowMultipleProgrammers}
-                    onChange={(e) => onUpdateConfig({ allowMultipleProgrammers: e.target.checked })}
-                    className="w-4.5 h-4.5 rounded text-purple-600 focus:ring-purple-400"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-bold text-slate-800 dark:text-slate-200">System Maintenance Lock</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Restricts client interface access during core schema upgrades.</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={config.maintenanceMode}
-                    onChange={(e) => {
-                      onUpdateConfig({ maintenanceMode: e.target.checked });
-                      showToast(e.target.checked ? "System lockdown mode enabled." : "System lockdown lifted.");
-                    }}
-                    className="w-4.5 h-4.5 rounded text-purple-600 focus:ring-purple-400"
-                  />
-                </div>
+              {/* Ledger transaction logs table */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden pt-2">
+                <table className="w-full text-xs text-left">
+                  <thead>
+                    <tr className="bg-slate-50 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b">
+                      <th className="p-3">Student Registry</th>
+                      <th className="p-3">Description</th>
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                    {financials.map((tx) => (
+                      <tr key={tx.id} className="hover:bg-slate-50">
+                        <td className="p-3 font-mono font-bold text-sky-500">{tx.regNo}</td>
+                        <td className="p-3">{tx.description}</td>
+                        <td className="p-3 text-slate-400">{tx.date}</td>
+                        <td className={`p-3 font-bold ${tx.type === 'invoice' ? 'text-red-500' : 'text-emerald-500'}`}>
+                          {tx.type === 'invoice' ? '-' : '+'}{tx.amount.toLocaleString()} TZS
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </motion.div>
         )}
+
+        {/* TAB 11: SETTINGS / BRAND CUSTOMIZER */}
+        {activeTab === 'settings' && (
+          <motion.div
+            key="settings"
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-200 dark:border-slate-800 shadow space-y-6`}
+          >
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex items-center gap-2">
+              <Settings className="w-5 h-5 text-indigo-500" />
+              <h2 className="text-sm font-extrabold text-slate-900 dark:text-slate-50 uppercase tracking-wider">
+                System Configurations & Brand Customs
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-medium">
+              <div className="p-4 bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 rounded-xl space-y-1.5">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase">Site Name title</span>
+                <input
+                  type="text"
+                  value={config.siteName}
+                  onChange={(e) => onUpdateConfig({ siteName: e.target.value })}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 p-2 text-xs rounded focus:outline-none"
+                />
+              </div>
+
+              <div className="p-4 bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 rounded-xl space-y-1.5">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase">Custom Welcome Message</span>
+                <input
+                  type="text"
+                  value={config.customGreeting}
+                  onChange={(e) => onUpdateConfig({ customGreeting: e.target.value })}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 p-2 text-xs rounded focus:outline-none"
+                />
+              </div>
+
+              <div className="p-4 bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 rounded-xl space-y-1.5">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase">Accent Color Theme</span>
+                <select
+                  value={config.colorAccent}
+                  onChange={(e) => onUpdateConfig({ colorAccent: e.target.value as any })}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 p-2 text-xs rounded focus:outline-none"
+                >
+                  <option value="sky">Ocean Blue (Sky)</option>
+                  <option value="emerald">Medic Green (Emerald)</option>
+                  <option value="violet">Royal Violet (Violet)</option>
+                  <option value="rose">Doctor Rose (Rose)</option>
+                </select>
+              </div>
+
+              <div className="p-4 bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 rounded-xl space-y-1.5">
+                <span className="block text-[10px] font-bold text-slate-400 uppercase">UI Border Corners</span>
+                <select
+                  value={config.borderRadius}
+                  onChange={(e) => onUpdateConfig({ borderRadius: e.target.value as any })}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 p-2 text-xs rounded focus:outline-none"
+                >
+                  <option value="square">Minimalist Square</option>
+                  <option value="soft">Elegant Soft (Medium)</option>
+                  <option value="curvy">Organic Curvy (Rounded)</option>
+                </select>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* TAB 12: CLASS TIMETABLE MANAGER */}
+        {activeTab === 'timetable' && (
+          <motion.div
+            key="timetable"
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            className={`p-6 ${getGlassmorphismClass(config.glassmorphism)} ${radius} border border-slate-200 dark:border-slate-800 shadow space-y-6`}
+          >
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-indigo-500" />
+                <h2 className="text-sm font-extrabold text-slate-900 dark:text-slate-50 uppercase tracking-wider">
+                  Class Timetable Registry
+                </h2>
+              </div>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                Editable by Staff & Programmers
+              </span>
+            </div>
+
+            {/* Day Selector */}
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {(['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const).map((day) => (
+                <button
+                  key={day}
+                  onClick={() => {
+                    setSelectedTimetableDay(day);
+                    setEditingSlotIndex(null);
+                  }}
+                  className={`px-4 py-2 text-xs font-bold ${radius} transition-all ${
+                    selectedTimetableDay === day
+                      ? 'bg-indigo-600 text-white shadow'
+                      : 'bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  {day === 'Mon' ? 'Monday' : day === 'Tue' ? 'Tuesday' : day === 'Wed' ? 'Wednesday' : day === 'Thu' ? 'Thursday' : 'Friday'}
+                </button>
+              ))}
+            </div>
+
+            {/* Current Day Schedule & Add/Edit Slot */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 text-xs font-medium">
+              {/* Add/Edit Slot Form */}
+              <div className="lg:col-span-5 p-4 bg-slate-50 dark:bg-slate-950/40 border border-slate-200/50 dark:border-slate-800/40 rounded-xl space-y-3">
+                <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                  {editingSlotIndex !== null ? '✏️ Edit Schedule Slot' : '➕ Add New Class Slot'}
+                </h3>
+
+                <div className="space-y-1.5">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Time Slot</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. 08:00 AM - 10:00 AM"
+                    value={slotTime}
+                    onChange={(e) => setSlotTime(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 text-xs rounded focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Course / Unit</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. Systemic Pathology"
+                    value={slotCourse}
+                    onChange={(e) => setSlotCourse(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 text-xs rounded focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase">Venue / Lecture Hall</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. Lecture Hall 2"
+                    value={slotVenue}
+                    onChange={(e) => setSlotVenue(e.target.value)}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 text-xs rounded focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase">Slot Type</span>
+                    <select
+                      value={slotType}
+                      onChange={(e) => setSlotType(e.target.value)}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 text-xs rounded focus:outline-none"
+                    >
+                      <option value="Lecture">Lecture</option>
+                      <option value="Practical">Practical</option>
+                      <option value="Dissection">Dissection</option>
+                      <option value="Seminar">Seminar</option>
+                      <option value="Tutorial">Tutorial</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase">Instructor</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Prof. E. Mshinda"
+                      value={slotInstructor}
+                      onChange={(e) => setSlotInstructor(e.target.value)}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-2 text-xs rounded focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={async () => {
+                      if (!slotTime || !slotCourse || !slotVenue) {
+                        showToast('Please specify slot time, course name, and venue.');
+                        return;
+                      }
+                      const updated = { ...weeklyTimetable };
+                      const newSlot = {
+                        time: slotTime,
+                        course: slotCourse,
+                        venue: slotVenue,
+                        type: slotType,
+                        instructor: slotInstructor || 'Faculty Staff'
+                      };
+
+                      if (editingSlotIndex !== null) {
+                        updated[selectedTimetableDay][editingSlotIndex] = newSlot;
+                      } else {
+                        updated[selectedTimetableDay] = [...(updated[selectedTimetableDay] || []), newSlot];
+                      }
+
+                      try {
+                        await setDoc(doc(db, "timetable", "weekly"), { timetable: updated });
+                        showToast('Timetable updated successfully.');
+                        setSlotTime('');
+                        setSlotCourse('');
+                        setSlotVenue('');
+                        setSlotInstructor('');
+                        setEditingSlotIndex(null);
+                      } catch (err: any) {
+                        showToast(`Failed to update timetable: ${err.message}`);
+                      }
+                    }}
+                    className={`flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black ${radius}`}
+                  >
+                    {editingSlotIndex !== null ? 'Apply Changes' : 'Append Slot'}
+                  </button>
+                  {editingSlotIndex !== null && (
+                    <button
+                      onClick={() => {
+                        setSlotTime('');
+                        setSlotCourse('');
+                        setSlotVenue('');
+                        setSlotInstructor('');
+                        setEditingSlotIndex(null);
+                      }}
+                      className={`px-3 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold ${radius}`}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* View Schedule Slots */}
+              <div className="lg:col-span-7 space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                    {selectedTimetableDay} Schedule
+                  </h3>
+                  <span className="text-[10px] text-slate-400">
+                    {(weeklyTimetable[selectedTimetableDay] || []).length} active slots
+                  </span>
+                </div>
+
+                <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                  {(weeklyTimetable[selectedTimetableDay] || []).length === 0 ? (
+                    <div className="text-center py-8 text-slate-400 font-mono">
+                      No lecture sessions scheduled for this day.
+                    </div>
+                  ) : (
+                    (weeklyTimetable[selectedTimetableDay] || []).map((slot, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3 bg-white dark:bg-slate-950/40 border border-slate-150 dark:border-slate-800/80 rounded-xl flex items-start justify-between gap-4"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                              {slot.course}
+                            </span>
+                            <span className="px-1.5 py-0.5 text-[8px] font-extrabold uppercase bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 rounded">
+                              {slot.type}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                            ⏳ {slot.time} | 🏫 {slot.venue}
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            👨‍🏫 {slot.instructor}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => {
+                              setSlotTime(slot.time);
+                              setSlotCourse(slot.course);
+                              setSlotVenue(slot.venue);
+                              setSlotType(slot.type);
+                              setSlotInstructor(slot.instructor);
+                              setEditingSlotIndex(idx);
+                            }}
+                            className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 rounded"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const updated = { ...weeklyTimetable };
+                              updated[selectedTimetableDay] = updated[selectedTimetableDay].filter((_, i) => i !== idx);
+                              try {
+                                await setDoc(doc(db, "timetable", "weekly"), { timetable: updated });
+                                showToast('Session slot removed.');
+                              } catch (err: any) {
+                                showToast(`Failed to delete slot: ${err.message}`);
+                              }
+                            }}
+                            className="p-1 hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 rounded"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Greater Programmer Controls */}
+                {currentUser.role === 'programmer' && (
+                  <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                    <div className="flex items-center gap-1">
+                      <Terminal className="w-4 h-4 text-emerald-500" />
+                      <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                        [SYSTEM PROGRAMMER DIRECT ACTION CONTROLS]
+                      </h4>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={async () => {
+                          if (confirm('Are you absolutely sure you want to reset the timetable to factory standard defaults?')) {
+                            try {
+                              await setDoc(doc(db, "timetable", "weekly"), { timetable: defaultTimetable });
+                              showToast('System Timetable factory-reset successfully.');
+                            } catch (err: any) {
+                              showToast(`Failed to reset: ${err.message}`);
+                            }
+                          }
+                        }}
+                        className={`px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase ${radius}`}
+                      >
+                        ⚠️ Factory Reset Timetable
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setRawJsonText(JSON.stringify(weeklyTimetable, null, 2));
+                          setShowJsonOverrideModal(true);
+                        }}
+                        className={`px-3 py-1.5 bg-slate-900 hover:bg-slate-850 dark:bg-slate-800 dark:hover:bg-slate-700 text-emerald-400 font-mono text-[10px] font-bold border border-emerald-500/30 ${radius}`}
+                      >
+                        💻 Direct JSON Edit Override
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Direct JSON Override Modal */}
+            {showJsonOverrideModal && (
+              <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className={`bg-slate-900 border border-slate-800 max-w-2xl w-full p-6 ${radius} space-y-4 shadow-2xl text-slate-100`}
+                >
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div className="flex items-center gap-2 font-mono">
+                      <Terminal className="w-4 h-4 text-emerald-500" />
+                      <span className="text-xs font-black text-emerald-400">TIMETABLE_JSON_OVERRIDE.bin</span>
+                    </div>
+                    <button
+                      onClick={() => setShowJsonOverrideModal(false)}
+                      className="text-slate-400 hover:text-white font-black"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    You are editing the raw JSON model. Make sure to adhere to the five-day weekday schema keys: <code className="text-amber-400">{"{\"Mon\": [], \"Tue\": [], ...}"}</code>. Invalid JSON will be rejected by the validation parser.
+                  </p>
+
+                  <textarea
+                    value={rawJsonText}
+                    onChange={(e) => setRawJsonText(e.target.value)}
+                    rows={12}
+                    className="w-full bg-slate-950 text-emerald-400 font-mono text-xs p-3 rounded-lg border border-slate-800 focus:outline-none focus:border-emerald-500"
+                  />
+
+                  <div className="flex justify-end gap-2 text-xs">
+                    <button
+                      onClick={() => setShowJsonOverrideModal(false)}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded"
+                    >
+                      Close Terminal
+                    </button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const parsed = JSON.parse(rawJsonText);
+                          // Basic structure validation
+                          const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+                          for (const d of days) {
+                            if (parsed[d] && !Array.isArray(parsed[d])) {
+                              throw new Error(`Day ${d} must be an array of sessions.`);
+                            }
+                          }
+                          await setDoc(doc(db, "timetable", "weekly"), { timetable: parsed });
+                          showToast('Raw JSON override successfully injected to Firestore!');
+                          setShowJsonOverrideModal(false);
+                        } catch (err: any) {
+                          alert(`JSON Validation Error: ${err.message}`);
+                        }
+                      }}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded"
+                    >
+                      Apply Raw Injection
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </motion.div>
+        )}
+
       </AnimatePresence>
     </div>
   );
-};
-
-// Simulated News Ticker mapper
-const allNewsItems = (onRemoveNews: (index: number) => void) => {
-  // Access state ticker list in-memory through localStorage or fallback data array
-  const cachedNews = JSON.parse(localStorage.getItem('muhas_pulse_news') || '[]');
-  if (cachedNews.length === 0) return null;
-  return cachedNews.map((item: string, idx: number) => (
-    <div key={idx} className="flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-950 p-2.5 rounded-lg border border-slate-200/50 dark:border-slate-800/40">
-      <span className="text-xs truncate text-slate-700 dark:text-slate-300 font-medium">
-        📢 {item}
-      </span>
-      <button
-        onClick={() => {
-          onRemoveNews(idx);
-        }}
-        className="text-red-500 p-1 hover:bg-red-50 hover:text-red-600 rounded-full shrink-0"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  ));
 };

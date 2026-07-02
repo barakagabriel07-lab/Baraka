@@ -18,6 +18,7 @@ export interface User {
   photo: string | null;
   chatAlias?: string; // name used during chat
   adminRole?: string;  // e.g. "CR", "Head of Department" to be seen by students
+  approved?: boolean;
 }
 
 export interface Report {
